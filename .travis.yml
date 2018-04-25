@@ -1,5 +1,7 @@
 language: rust
 dist: trusty
+services:
+  - docker
 rust:
   - stable
   - beta
@@ -9,6 +11,8 @@ matrix:
     - rust: nightly
   fast_finish: true
 cache: cargo
+before_script:
+  - docker run -d -p 24224:24224 --name fluentd fluent/fluentd:v1.1.0
 script:
   - cargo build --verbose --all
   - cargo test --verbose --all
