@@ -35,14 +35,14 @@ pub struct AckReply {
     pub ack: String,
 }
 
-pub fn pack_record(
+pub fn pack_record<'a>(
     buf: &mut Vec<u8>,
-    tag: String,
+    tag: &'a str,
     entries: Vec<(SystemTime, Vec<u8>)>,
-    chunk: String,
+    chunk: &'a str,
 ) -> Result<(), Error> {
     buf.push(0x93);
-    encode::write_str(buf, tag.as_str())
+    encode::write_str(buf, tag)
         .map_err(|e| Error::DeriveError(e.description().to_string()))?;
     encode::write_array_len(buf, entries.len() as u32)
         .map_err(|e| Error::DeriveError(e.description().to_string()))?;
@@ -54,17 +54,16 @@ pub fn pack_record(
             buf.push(elem);
         }
     }
-    let options = Some(Options { chunk });
+    let options = Some(Options { chunk: chunk.to_string() });
     options
         .serialize(&mut Serializer::with(buf, StructMapWriter))
         .map_err(|e| Error::DeriveError(e.description().to_string()))
 }
 
-pub fn unpack_response<'a>(resp_buf: &'a [u8], size: usize) -> Result<AckReply, Error> {
+pub fn unpack_response(resp_buf: &[u8], size: usize) -> Result<AckReply, Error> {
     let mut de = Deserializer::new(&resp_buf[0..size]);
-    let ret = Deserialize::deserialize(&mut de)
-        .map_err(|e| Error::DeriveError(e.description().to_string()))?;
-    Ok(ret)
+    Deserialize::deserialize(&mut de)
+        .map_err(|e| Error::DeriveError(e.description().to_string()))
 }
 
 #[cfg(test)]
@@ -142,7 +141,7 @@ mod test_pack_record {
 
         for ((t, es, c), expected) in matrix {
             let mut buf = Vec::new();
-            pack_record(&mut buf, t.to_string(), es, c.to_string()).unwrap();
+            pack_record(&mut buf, t, es, c).unwrap();
             assert_eq!(buf, expected);
         }
     }

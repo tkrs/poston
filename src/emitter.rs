@@ -39,7 +39,7 @@ impl Emitter {
         let mut entries = Vec::with_capacity(size);
         queue.take(&mut entries);
 
-        buffer::pack_record(&mut buf, self.tag.clone(), entries, chunk.clone())?;
+        buffer::pack_record(&mut buf, self.tag.as_str(), entries, chunk.as_str())?;
 
         rw.write(buf).map_err(Error::NetworkError)?;
         let mut resp_buf = [0u8; 64];
