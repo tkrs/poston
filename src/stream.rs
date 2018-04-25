@@ -23,9 +23,8 @@ pub struct ConnectionSettings {
     pub write_retry_initial_delay: Duration,
 }
 
-impl <A: ToSocketAddrs + Clone> Stream<A> {
-    pub fn connect(addr: A, settings: ConnectionSettings) -> io::Result<Stream<A>>
-    {
+impl<A: ToSocketAddrs + Clone> Stream<A> {
+    pub fn connect(addr: A, settings: ConnectionSettings) -> io::Result<Stream<A>> {
         let stream = connect(addr.clone(), settings.clone())?;
         let stream = RefCell::new(stream);
         Ok(Stream {
