@@ -1,13 +1,13 @@
+use connect::{ConnectionSettings, ReconnectWrite, Stream};
 use emitter::Emitter;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::Read;
-use std::net::ToSocketAddrs;
+use std::net::{TcpStream, ToSocketAddrs};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime};
-use stream::{ConnectionSettings, ReconnectableWriter, Stream};
 
 pub struct Worker {
     pub id: usize,
@@ -27,7 +27,7 @@ impl Worker {
         A: ToSocketAddrs + Clone,
         A: Send + 'static,
     {
-        let mut stream = Stream::connect(addr, conn_settings)
+        let mut stream: Stream<A, TcpStream> = Stream::connect(addr, conn_settings)
             .expect(&format!("Worker {} couldn't connect to server.", id));
 
         let emitters = RefCell::new(HashMap::new());
@@ -71,7 +71,7 @@ impl WorkerHandler {
 
     fn flush<RW>(&self, w: &mut RW, size: Option<usize>)
     where
-        RW: ReconnectableWriter + Read,
+        RW: ReconnectWrite + Read,
     {
         for (tag, emitter) in self.emitters.borrow().iter() {
             if let Err(e) = emitter.emit(w, size) {

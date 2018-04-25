@@ -14,13 +14,13 @@ pub enum Error {
 
 impl StdError for Error {
     fn description(&self) -> &str {
-        match self {
-            &Error::NetworkError(ref e) => e.description(),
-            &Error::DeriveError(ref e) => e,
-            &Error::SendError(ref e) => e,
-            &Error::AckUmatchedError => "request chunk and response ack-id did not match",
-            &Error::EmittingTimeoutError => "emitting timeout",
-            &Error::ConnectingTimeoutError => "connecting timeout",
+        match *self {
+            Error::NetworkError(ref e) => e.description(),
+            Error::DeriveError(ref e) => e,
+            Error::SendError(ref e) => e,
+            Error::AckUmatchedError => "request chunk and response ack-id did not match",
+            Error::EmittingTimeoutError => "emitting timeout",
+            Error::ConnectingTimeoutError => "connecting timeout",
         }
     }
 }

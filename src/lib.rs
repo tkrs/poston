@@ -11,8 +11,8 @@ extern crate uuid;
 pub mod client;
 
 mod buffer;
+mod connect;
 mod emitter;
 mod error;
-mod stream;
 mod time_pack;
 mod worker;

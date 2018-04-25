@@ -1,3 +1,4 @@
+use connect;
 use error::Error;
 use rmps::encode::StructMapWriter;
 use rmps::Serializer;
@@ -8,7 +9,6 @@ use std::net::ToSocketAddrs;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
-use stream;
 use worker::{Message, Worker};
 
 pub trait Client {
@@ -23,14 +23,14 @@ pub struct WorkerPool {
 }
 
 impl WorkerPool {
-    pub fn new<A>(addr: A) -> io::Result<WorkerPool>
+    pub fn new<A>(addr: &A) -> io::Result<WorkerPool>
     where
         A: ToSocketAddrs + Clone,
         A: Send + 'static,
     {
-        WorkerPool::with_settings(addr, Default::default())
+        WorkerPool::with_settings(addr, &Default::default())
     }
-    pub fn with_settings<A>(addr: A, settings: Settings) -> io::Result<WorkerPool>
+    pub fn with_settings<A>(addr: &A, settings: &Settings) -> io::Result<WorkerPool>
     where
         A: ToSocketAddrs + Clone,
         A: Send + 'static,
@@ -43,7 +43,7 @@ impl WorkerPool {
         let receiver = Arc::new(Mutex::new(receiver));
 
         for id in 0..settings.workers {
-            let conn_settings = stream::ConnectionSettings {
+            let conn_settings = connect::ConnectionSettings {
                 connect_retry_initial_delay: settings.connection_retry_initial_delay,
                 connect_retry_max_delay: settings.connection_retry_max_delay,
                 connect_retry_timeout: settings.connection_retry_timeout,
