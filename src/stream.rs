@@ -34,6 +34,7 @@ impl<A: ToSocketAddrs + Clone> Stream<A> {
         })
     }
 }
+
 pub trait Reconnect {
     fn reconnect(&mut self) -> io::Result<()>;
 }
