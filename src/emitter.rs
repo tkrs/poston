@@ -53,3 +53,6 @@ impl Emitter {
         }
     }
 }
+
+#[cfg(test)]
+mod test {}

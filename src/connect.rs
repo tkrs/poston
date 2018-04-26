@@ -251,3 +251,6 @@ impl<W: Write + Reconnect + WriteRetryDelay> ReconnectWrite for W {
         }
     }
 }
+
+#[cfg(test)]
+mod test {}

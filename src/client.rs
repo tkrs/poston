@@ -136,3 +136,6 @@ impl Default for Settings {
         }
     }
 }
+
+#[cfg(test)]
+mod test {}

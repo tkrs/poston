@@ -88,3 +88,6 @@ pub enum Message {
     Queuing(String, SystemTime, Vec<u8>),
     Terminate,
 }
+
+#[cfg(test)]
+mod test {}

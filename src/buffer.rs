@@ -42,8 +42,7 @@ pub fn pack_record<'a>(
     chunk: &'a str,
 ) -> Result<(), Error> {
     buf.push(0x93);
-    encode::write_str(buf, tag)
-        .map_err(|e| Error::DeriveError(e.description().to_string()))?;
+    encode::write_str(buf, tag).map_err(|e| Error::DeriveError(e.description().to_string()))?;
     encode::write_array_len(buf, entries.len() as u32)
         .map_err(|e| Error::DeriveError(e.description().to_string()))?;
     for (t, entry) in entries {
@@ -54,7 +53,9 @@ pub fn pack_record<'a>(
             buf.push(elem);
         }
     }
-    let options = Some(Options { chunk: chunk.to_string() });
+    let options = Some(Options {
+        chunk: chunk.to_string(),
+    });
     options
         .serialize(&mut Serializer::with(buf, StructMapWriter))
         .map_err(|e| Error::DeriveError(e.description().to_string()))
@@ -62,8 +63,7 @@ pub fn pack_record<'a>(
 
 pub fn unpack_response(resp_buf: &[u8], size: usize) -> Result<AckReply, Error> {
     let mut de = Deserializer::new(&resp_buf[0..size]);
-    Deserialize::deserialize(&mut de)
-        .map_err(|e| Error::DeriveError(e.description().to_string()))
+    Deserialize::deserialize(&mut de).map_err(|e| Error::DeriveError(e.description().to_string()))
 }
 
 #[cfg(test)]
