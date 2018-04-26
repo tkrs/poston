@@ -7,7 +7,7 @@ use std::net::{TcpStream, ToSocketAddrs};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 pub struct Worker {
     pub id: usize,
@@ -35,20 +35,30 @@ impl Worker {
 
         let builder = thread::Builder::new().name(format!("fluent-worker-pool-{}", id));
         let handler = builder
-            .spawn(move || loop {
-                let receiver = receiver.lock().expect("Receiver couldn't be locked.");
-                match receiver.recv_timeout(flush_period) {
-                    Ok(msg) => match msg {
-                        Message::Queuing(tag, tm, msg) => wh.push(tag, tm, msg),
-                        Message::Terminate => {
-                            wh.flush(&mut stream, None);
-                            break;
+            .spawn(move || {
+                let mut start = Instant::now();
+                loop {
+                    let receiver = receiver.lock().expect("Receiver couldn't be locked.");
+                    match receiver.recv_timeout(flush_period) {
+                        Ok(msg) => match msg {
+                            Message::Queuing(tag, tm, msg) => {
+                                wh.push(tag, tm, msg);
+                                if start.elapsed() >= flush_period {
+                                    wh.flush(&mut stream, Some(flush_size));
+                                    start = Instant::now();
+                                }
+                            },
+                            Message::Terminate => {
+                                wh.flush(&mut stream, None);
+                                break;
+                            }
+                        },
+                        Err(_) => {
+                            wh.flush(&mut stream, Some(flush_size));
+                            start = Instant::now();
                         }
-                    },
-                    Err(_) => {
-                        wh.flush(&mut stream, Some(flush_size));
-                    }
-                };
+                    };
+                }
             })
             .ok();
 
