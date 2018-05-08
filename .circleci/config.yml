@@ -6,6 +6,7 @@ steps_template: &steps_template
           - deps-cargo-{{ checksum "Cargo.toml" }}
           - deps-cargo-
     - run: cargo +nightly fmt -- --color=always --error-on-unformatted --write-mode=check
+    - run: cargo +nightly clippy
     - run: cargo build --verbose --all
     - run: cargo test --verbose --all
     - save_cache:
