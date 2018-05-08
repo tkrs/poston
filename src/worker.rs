@@ -47,7 +47,7 @@ impl Worker {
                                     wh.flush(&mut stream, Some(flush_size));
                                     start = Instant::now();
                                 }
-                            },
+                            }
                             Message::Terminate => {
                                 wh.flush(&mut stream, None);
                                 break;
