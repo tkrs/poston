@@ -38,7 +38,7 @@ impl Worker {
             .spawn(move || {
                 let mut start = Instant::now();
                 loop {
-                    let receiver = receiver.lock().expect("Receiver couldn't be locked.");
+                    let receiver = receiver.lock().expect("Couldn't be locked.");
                     match receiver.recv_timeout(flush_period) {
                         Ok(msg) => match msg {
                             Message::Queuing(tag, tm, msg) => {
@@ -79,14 +79,14 @@ impl WorkerHandler {
         emitter.push((tm, msg));
     }
 
-    fn flush<RW>(&self, w: &mut RW, size: Option<usize>)
+    fn flush<RW>(&self, rw: &mut RW, size: Option<usize>)
     where
         RW: ReconnectWrite + Read,
     {
         for (tag, emitter) in self.emitters.borrow().iter() {
-            if let Err(e) = emitter.emit(w, size) {
+            if let Err(e) = emitter.emit(rw, size) {
                 error!(
-                    "Tag: {}, an unexpected error occurred during emitting message. Details: {:?}",
+                    "Tag: {}, an unexpected error occurred during emitting message: Caused by '{:?}'.",
                     tag, e
                 );
             }
