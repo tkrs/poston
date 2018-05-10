@@ -2,6 +2,18 @@
 name = "poston"
 version = "0.1.0"
 authors = ["Takeru Sato <type.in.type@gmail.com>"]
+description = "Yet another Fluentd logger for Rust"
+documentation = "https://github.com/tkrs/poston"
+homepage = "https://github.com/tkrs/poston"
+repository = "https://github.com/tkrs/poston.git"
+readme = "README.md"
+license-file = "LICENSE"
+keywords = ["fluentd", "fluentd-logger"]
+categories = ["network-programming"]
+
+[badges]
+circle-ci = { repository = "tkrs/poston" }
+maintenance = { status = "experimental" }
 
 [dependencies]
 base64 = "0.9.0"
@@ -11,3 +23,25 @@ rmp-serde = "0.13"
 serde = "1.0"
 serde_derive = "1.0"
 uuid = { version = "0.6", features = ["v4"] }
+
+[profile.dev]
+opt-level = 0
+debug = true
+rpath = false
+lto = false
+debug-assertions = true
+codegen-units = 1
+panic = 'unwind'
+incremental = true
+overflow-checks = true
+
+[profile.test]
+opt-level = 0
+debug = 2
+rpath = false
+lto = false
+debug-assertions = true
+codegen-units = 1
+panic = 'unwind'
+incremental = true
+overflow-checks = true
