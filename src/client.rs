@@ -14,7 +14,7 @@ use worker::{Message, Worker};
 pub trait Client {
     fn send<A>(&self, tag: String, a: &A, timestamp: SystemTime) -> Result<(), Error>
     where
-        A: Serialize + Send + 'static;
+        A: Serialize + Send;
 }
 
 pub struct WorkerPool {
@@ -71,7 +71,7 @@ impl WorkerPool {
 impl Client for WorkerPool {
     fn send<A>(&self, tag: String, a: &A, timestamp: SystemTime) -> Result<(), Error>
     where
-        A: Serialize + Send + 'static,
+        A: Serialize + Send,
     {
         let mut buf = Vec::new();
         a.serialize(&mut Serializer::with(&mut buf, StructMapWriter))
