@@ -16,3 +16,5 @@ mod emitter;
 mod error;
 mod time_pack;
 mod worker;
+
+pub use client::{Client, WorkerPool, Settings};

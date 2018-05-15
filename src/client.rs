@@ -12,7 +12,7 @@ use std::time::{Duration, SystemTime};
 use worker::{Message, Worker};
 
 pub trait Client {
-    fn send<A>(&self, tag: String, a: A, timestamp: SystemTime) -> Result<(), Error>
+    fn send<A>(&self, tag: String, a: &A, timestamp: SystemTime) -> Result<(), Error>
     where
         A: Serialize + Send + 'static;
 }
@@ -69,7 +69,7 @@ impl WorkerPool {
 }
 
 impl Client for WorkerPool {
-    fn send<A>(&self, tag: String, a: A, timestamp: SystemTime) -> Result<(), Error>
+    fn send<A>(&self, tag: String, a: &A, timestamp: SystemTime) -> Result<(), Error>
     where
         A: Serialize + Send + 'static,
     {
