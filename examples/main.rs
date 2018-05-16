@@ -5,7 +5,6 @@ extern crate rand;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
-extern crate tmc;
 #[macro_use]
 extern crate log;
 extern crate env_logger;
@@ -14,7 +13,6 @@ use rand::Rng;
 use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
-use tmc::DurationOpt;
 
 use poston::{Client, Settings, WorkerPool};
 
@@ -30,7 +28,7 @@ lazy_static! {
         // let pool = WorkerPool::new(&"127.0.0.1:24224".to_string()).expect("Couldn't create the worker pool.");
         let settins = Settings {
             workers: 4,
-            flush_period: 64.millis(),
+            flush_period: Duration::from_millis(64),
             max_flush_entries: 5120,
             ..Default::default()
         };
@@ -61,7 +59,6 @@ fn main() {
                 let a = Human { age, name };
                 let timestamp = SystemTime::now();
 
-                // thread::sleep(10.millis());
                 let pool = POOL.lock().expect("Client couldn't be locked.");
                 pool.send(tag, &a, timestamp).unwrap();
                 thread::sleep(Duration::new(0, 5));
