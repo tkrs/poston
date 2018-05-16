@@ -49,7 +49,7 @@ impl Emitter {
         if reply.ack == chunk {
             Ok(())
         } else {
-            Err(Error::AckUmatchedError)
+            Err(Error::AckUmatchedError(reply.ack, chunk))
         }
     }
 }

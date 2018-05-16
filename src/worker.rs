@@ -42,13 +42,16 @@ impl Worker {
                     match receiver.recv_timeout(flush_period) {
                         Ok(msg) => match msg {
                             Message::Queuing(tag, tm, msg) => {
+                                trace!("Worker {} received a queuing message; tag: {}.", id, tag);
                                 wh.push(tag, tm, msg);
                                 if start.elapsed() >= flush_period {
+                                    trace!("Worker {} started flushing messages.", id);
                                     wh.flush(&mut stream, Some(flush_size));
                                     start = Instant::now();
                                 }
                             }
                             Message::Terminate => {
+                                debug!("Worker {} received a terminate message.", id);
                                 wh.flush(&mut stream, None);
                                 break;
                             }
