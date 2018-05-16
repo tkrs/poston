@@ -25,9 +25,9 @@ serde_derive = "1.0"
 uuid = { version = "0.6", features = ["v4"] }
 
 [dev-dependencies]
-env_logger = "*"
-lazy_static = "*"
-rand = "*"
+env_logger = "0.5"
+lazy_static = "0.2"
+rand = "0.4"
 
 [profile.dev]
 opt-level = 0
