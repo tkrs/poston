@@ -43,6 +43,7 @@ impl WorkerPool {
         let receiver = Arc::new(Mutex::new(receiver));
 
         for id in 0..settings.workers {
+            debug!("Worker {} creating...", id);
             let conn_settings = connect::ConnectionSettings {
                 connect_retry_initial_delay: settings.connection_retry_initial_delay,
                 connect_retry_max_delay: settings.connection_retry_max_delay,
@@ -73,6 +74,7 @@ impl Client for WorkerPool {
     where
         A: Serialize,
     {
+        trace!("Send a tag: {}", tag);
         let mut buf = Vec::new();
         a.serialize(&mut Serializer::with(&mut buf, StructMapWriter))
             .map_err(|e| Error::DeriveError(e.description().to_string()))?;

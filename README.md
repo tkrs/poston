@@ -4,4 +4,6 @@
 
 Yet another fluentd logger for Rust
 
-See [example](https://github.com/tkrs/rust-sandbox/blob/master/fluent-main/src/main.rs)
+## Usage
+
+See examples
