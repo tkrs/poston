@@ -34,7 +34,7 @@ pub trait ConnectRetryDelay {
 pub struct Stream<A, S>
 where
     A: ToSocketAddrs + Clone,
-    S: RetryableConnect<S>,
+    S: ReconnectableWrite<S>,
     S: Connect<S>,
     S: Write + Read + TcpConfig,
 {
@@ -59,7 +59,7 @@ pub struct ConnectionSettings {
 impl<A, S> Stream<A, S>
 where
     A: ToSocketAddrs + Clone,
-    S: RetryableConnect<S>,
+    S: ReconnectableWrite<S>,
     S: Connect<S>,
     S: Write + Read + TcpConfig,
 {
@@ -77,7 +77,7 @@ where
 impl<A, S> Reconnect for Stream<A, S>
 where
     A: ToSocketAddrs + Clone,
-    S: RetryableConnect<S>,
+    S: ReconnectableWrite<S>,
     S: Connect<S>,
     S: Write + Read + TcpConfig,
 {
@@ -91,7 +91,7 @@ where
 impl<A, S> Write for Stream<A, S>
 where
     A: ToSocketAddrs + Clone,
-    S: RetryableConnect<S>,
+    S: ReconnectableWrite<S>,
     S: Connect<S>,
     S: Write + Read + TcpConfig,
 {
@@ -107,7 +107,7 @@ where
 impl<A, S> Read for Stream<A, S>
 where
     A: ToSocketAddrs + Clone,
-    S: RetryableConnect<S>,
+    S: ReconnectableWrite<S>,
     S: Connect<S>,
     S: Write + Read + TcpConfig,
 {
@@ -139,7 +139,7 @@ impl Connect<TcpStream> for TcpStream {
     }
 }
 
-pub trait RetryableConnect<T>
+pub trait ReconnectableWrite<T>
 where
     T: Connect<T>,
     T: Write + Read + TcpConfig,
@@ -149,7 +149,7 @@ where
         A: ToSocketAddrs + Clone;
 }
 
-impl<C> RetryableConnect<C> for C
+impl<C> ReconnectableWrite<C> for C
 where
     C: Connect<C>,
     C: Write + Read + TcpConfig,
@@ -195,7 +195,7 @@ pub trait WriteRetryDelay {
 impl<A, S> WriteRetryDelay for Stream<A, S>
 where
     A: ToSocketAddrs + Clone,
-    S: RetryableConnect<S>,
+    S: ReconnectableWrite<S>,
     S: Connect<S>,
     S: Write + Read + TcpConfig,
 {
