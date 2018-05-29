@@ -5,7 +5,7 @@ steps_template: &steps_template
         keys:
           - deps-cargo-{{ checksum "Cargo.toml" }}
           - deps-cargo-
-    - run: cargo +nightly fmt -- --color=always --error-on-unformatted --write-mode=check
+    - run: cargo +nightly fmt -- --color=always --error-on-unformatted --check
     - run: cargo +nightly clippy
     - run: cargo build --verbose --all
     - run: cargo test --verbose --all
