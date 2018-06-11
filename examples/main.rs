@@ -7,7 +7,7 @@ extern crate serde;
 extern crate serde_derive;
 #[macro_use]
 extern crate log;
-extern crate env_logger;
+extern crate pretty_env_logger;
 
 use rand::Rng;
 use std::sync::Mutex;
@@ -39,7 +39,7 @@ lazy_static! {
 }
 
 fn main() {
-    env_logger::init();
+    pretty_env_logger::init();
 
     info!("Start.");
 
