@@ -1,6 +1,6 @@
 [package]
 name = "poston"
-version = "0.1.4"
+version = "0.1.5-alpha.0"
 authors = ["Takeru Sato <type.in.type@gmail.com>"]
 description = "Yet another Fluentd logger for Rust"
 documentation = "https://github.com/tkrs/poston"
