@@ -71,5 +71,8 @@ fn main() {
         c.join().expect("Couldn't join on the associated thread");
     }
 
+    let mut pool = POOL.lock().expect("Client couldn't be locked.");
+    pool.close();
+
     info!("End. elapsed: {:?}", start.elapsed());
 }

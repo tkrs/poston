@@ -6,6 +6,7 @@ use serde::Serialize;
 use std::error::Error as StdError;
 use std::io;
 use std::net::ToSocketAddrs;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
@@ -15,11 +16,14 @@ pub trait Client {
     fn send<A>(&self, tag: String, a: &A, timestamp: SystemTime) -> Result<(), Error>
     where
         A: Serialize;
+
+    fn close(&mut self);
 }
 
 pub struct WorkerPool {
     workers: Vec<Worker>,
     sender: mpsc::Sender<Message>,
+    closed: AtomicBool,
 }
 
 impl WorkerPool {
@@ -65,7 +69,11 @@ impl WorkerPool {
             workers.push(wkr);
         }
 
-        Ok(WorkerPool { workers, sender })
+        Ok(WorkerPool {
+            workers,
+            sender,
+            closed: AtomicBool::new(false),
+        })
     }
 }
 
@@ -75,6 +83,12 @@ impl Client for WorkerPool {
         A: Serialize,
     {
         trace!("Send a tag: {}", tag);
+
+        if self.closed.load(Ordering::Acquire) {
+            debug!("Workers are already closed.");
+            return Ok(());
+        }
+
         let mut buf = Vec::new();
         a.serialize(&mut Serializer::with(&mut buf, StructMapWriter))
             .map_err(|e| Error::DeriveError(e.description().to_string()))?;
@@ -83,10 +97,13 @@ impl Client for WorkerPool {
             .map_err(|e| Error::SendError(e.description().to_string()))?;
         Ok(())
     }
-}
 
-impl Drop for WorkerPool {
-    fn drop(&mut self) {
+    fn close(&mut self) {
+        if self.closed.fetch_or(true, Ordering::SeqCst) {
+            debug!("Workers are already closed.");
+            return;
+        }
+
         debug!("Sending terminate message to all workers.");
 
         for _ in &mut self.workers {
@@ -103,6 +120,12 @@ impl Drop for WorkerPool {
                 w.join().unwrap();
             }
         }
+    }
+}
+
+impl Drop for WorkerPool {
+    fn drop(&mut self) {
+        self.close()
     }
 }
 
