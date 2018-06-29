@@ -4,8 +4,13 @@ steps_template: &steps_template
     - run: apt-get update && apt-get -y install libssl-dev pkg-config cmake zlib1g-dev
     - restore_cache:
         keys:
-          - deps-cargo-{{ checksum "Cargo.toml" }}
-          - deps-cargo-
+          - cargo-tarpaulin-{{ .Environment.CIRCLE_JOB }}-v0.6.2
+    - restore_cache:
+        keys:
+          - deps-cargo-{{ .Environment.CIRCLE_JOB }}-{{ checksum "Cargo.toml" }}
+          - deps-cargo-{{ .Environment.CIRCLE_JOB }}-
+          - deps-cargo--{{ checksum "Cargo.toml" }}
+          - deps-cargo--
     - run: cargo +nightly fmt -- --color=always --error-on-unformatted --check
     - run: cargo +nightly clippy
     - run: cargo build --verbose --all
@@ -18,7 +23,11 @@ steps_template: &steps_template
         cargo tarpaulin --out Xml
         bash <(curl -s https://codecov.io/bash)
     - save_cache:
-        key: deps-cargo-{{ checksum "Cargo.toml" }}
+        key: cargo-tarpaulin-{{ .Environment.CIRCLE_JOB }}-v0.6.2
+        paths:
+          - /usr/local/cargo/bin/cargo-tarpaulin
+    - save_cache:
+        key: deps-cargo-{{ .Environment.CIRCLE_JOB }}-{{ checksum "Cargo.toml" }}
         paths:
           - ~/.cargo
 version: 2
