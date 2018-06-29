@@ -1,6 +1,7 @@
 steps_template: &steps_template
   steps:
     - checkout
+    - run: apt-get update && apt-get -y install libssl-dev pkg-config cmake zlib1g-dev
     - restore_cache:
         keys:
           - deps-cargo-{{ checksum "Cargo.toml" }}
@@ -9,6 +10,13 @@ steps_template: &steps_template
     - run: cargo +nightly clippy
     - run: cargo build --verbose --all
     - run: cargo test --verbose --all
+    - run: |
+        if [ "${CIRCLE_JOB}" != "version" ]; then exit 0; fi
+        if ! cargo tarpaulin --help > /dev/null 2>&1; then
+          RUSTFLAGS="--cfg procmacro2_semver_exempt" cargo install cargo-tarpaulin
+        fi
+        cargo tarpaulin --out Xml
+        bash <(curl -s https://codecov.io/bash)
     - save_cache:
         key: deps-cargo-{{ checksum "Cargo.toml" }}
         paths:
