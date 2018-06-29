@@ -28,7 +28,7 @@ impl Worker {
         A: Send + 'static,
     {
         let mut stream: Stream<A, TcpStream> = Stream::connect(addr, conn_settings)
-            .expect(&format!("Worker {} couldn't connect to server.", id));
+            .unwrap_or_else(|_| panic!("Worker {} couldn't connect to server.", id));
 
         let emitters = RefCell::new(HashMap::new());
         let wh = WorkerHandler { emitters };
