@@ -7,8 +7,10 @@ steps_template: &steps_template
           - cargo-tarpaulin-{{ .Environment.CIRCLE_JOB }}-v0.6.2
     - restore_cache:
         keys:
-          - deps-cargo-{{ checksum "Cargo.toml" }}
-          - deps-cargo-
+          - deps-cargo-{{ .Environment.CIRCLE_JOB }}-{{ checksum "Cargo.toml" }}
+          - deps-cargo-{{ .Environment.CIRCLE_JOB }}-
+          - deps-cargo--{{ checksum "Cargo.toml" }}
+          - deps-cargo--
     - run: cargo +nightly fmt -- --color=always --error-on-unformatted --check
     - run: cargo +nightly clippy
     - run: cargo build --verbose --all
@@ -25,7 +27,7 @@ steps_template: &steps_template
         paths:
           - /usr/local/cargo/bin/cargo-tarpaulin
     - save_cache:
-        key: deps-cargo-{{ checksum "Cargo.toml" }}
+        key: deps-cargo-{{ .Environment.CIRCLE_JOB }}-{{ checksum "Cargo.toml" }}
         paths:
           - ~/.cargo
 version: 2
