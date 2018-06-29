@@ -20,14 +20,14 @@ base64 = "0.9.2"
 log = "0.4.2"
 rmp = "0.8.7"
 rmp-serde = "0.13.7"
-serde = "1.0.66"
-serde_derive = "1.0.66"
+serde = "1.0.68"
+serde_derive = "1.0.68"
 uuid = { version = "0.6.5", features = ["v4"] }
 
 [dev-dependencies]
 pretty_env_logger = "0.2.3"
 lazy_static = "1.0.1"
-rand = "0.5.1"
+rand = "0.5.3"
 
 [profile.dev]
 opt-level = 0
