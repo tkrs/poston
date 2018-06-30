@@ -1,0 +1,57 @@
+image: Visual Studio 2017
+
+install:
+  - set PATH=C:\Ruby23\DevKit;C:\Ruby23\bin;C:\Users\appveyor\.cargo\bin;%PATH%
+  # - set FLUENTD_VERSION=1.2.2
+  # - devkitvars.bat
+  # - ruby -v
+  # - git clone -b v%FLUENTD_VERSION% --depth 1 https://github.com/fluent/fluentd.git .fluentd
+  # - cd .fluentd
+  # - gem install bundler
+  # - bundle install
+  # - bundle exec rake build
+  # - gem install pkg\fluentd-%FLUENTD_VERSION%.gem --no-ri --no-rdoc
+  # - cd ..
+  - curl -sSf -o rustup-init.exe https://win.rustup.rs
+  - rustup-init.exe --default-host %TARGET% --default-toolchain %RUST_TOOLCHAIN% -y
+  - rustc -Vv
+  - cargo -V
+
+build: false
+
+# before_test:
+#   - fluentd -c fluent.conf --daemon ./fluentd.pid
+
+test_script:
+  - cargo build --verbose --all
+  # - cargo test --verbose --all
+
+environment:
+  matrix:
+    # Stable channel
+    # - TARGET: i686-pc-windows-gnu
+    #   RUST_TOOLCHAIN: stable
+    # - TARGET: i686-pc-windows-msvc
+    #   RUST_TOOLCHAIN: stable
+    - TARGET: x86_64-pc-windows-gnu
+      RUST_TOOLCHAIN: stable
+    # - TARGET: x86_64-pc-windows-msvc
+    #   RUST_TOOLCHAIN: stable
+    # # Beta channel
+    # - TARGET: i686-pc-windows-gnu
+    #   RUST_TOOLCHAIN: beta
+    # - TARGET: i686-pc-windows-msvc
+    #   RUST_TOOLCHAIN: beta
+    - TARGET: x86_64-pc-windows-gnu
+      RUST_TOOLCHAIN: beta
+    # - TARGET: x86_64-pc-windows-msvc
+    #   RUST_TOOLCHAIN: beta
+    # # Nightly channel
+    # - TARGET: i686-pc-windows-gnu
+    #   RUST_TOOLCHAIN: nightly
+    # - TARGET: i686-pc-windows-msvc
+    #   RUST_TOOLCHAIN: nightly
+    - TARGET: x86_64-pc-windows-gnu
+      RUST_TOOLCHAIN: nightly
+    # - TARGET: x86_64-pc-windows-msvc
+    #   RUST_TOOLCHAIN: nightly
