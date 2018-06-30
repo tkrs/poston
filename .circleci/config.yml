@@ -39,14 +39,20 @@ jobs:
   stable:
     docker:
       - image: quay.io/tkrs/docker-rust:stable
+        environment:
+          RUSTUP_TOOLCHAIN: stable
     <<: *steps_template
   beta:
     docker:
       - image: quay.io/tkrs/docker-rust:beta
+        environment:
+          RUSTUP_TOOLCHAIN: beta
     <<: *steps_template
   nightly:
     docker:
       - image: quay.io/tkrs/docker-rust:nightly
+        environment:
+          RUSTUP_TOOLCHAIN: nightly
     <<: *steps_template
 workflows:
   version: 2
