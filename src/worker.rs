@@ -2,7 +2,7 @@ use connect::{ConnectionSettings, ReconnectWrite, Stream};
 use emitter::Emitter;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::io::Read;
+use std::io::{self, Read};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -22,13 +22,12 @@ impl Worker {
         receiver: Arc<Mutex<mpsc::Receiver<Message>>>,
         flush_period: Duration,
         flush_size: usize,
-    ) -> Worker
+    ) -> io::Result<Worker>
     where
         A: ToSocketAddrs + Clone,
         A: Send + 'static,
     {
-        let mut stream: Stream<A, TcpStream> = Stream::connect(addr, conn_settings)
-            .unwrap_or_else(|_| panic!("Worker {} couldn't connect to server.", id));
+        let mut stream: Stream<A, TcpStream> = Stream::connect(addr, conn_settings)?;
 
         let emitters = RefCell::new(HashMap::new());
         let wh = WorkerHandler { emitters };
@@ -65,7 +64,7 @@ impl Worker {
             })
             .ok();
 
-        Worker { id, handler }
+        Ok(Worker { id, handler })
     }
 }
 
@@ -103,4 +102,30 @@ pub enum Message {
 }
 
 #[cfg(test)]
-mod test {}
+mod tests {
+    use self::super::*;
+    use connect::ConnectionSettings;
+    use std::sync::mpsc;
+
+    #[test]
+    fn worker_new_should_return_err_when_the_connection_open_is_failed() {
+        let addr = "127.0.0.1:25";
+        let settings = ConnectionSettings {
+            connect_retry_initial_delay: Duration::new(0, 1),
+            connect_retry_max_delay: Duration::new(0, 1),
+            connect_retry_timeout: Duration::from_millis(10),
+            ..Default::default()
+        };
+        let (_, receiver) = mpsc::channel();
+        let receiver = Arc::new(Mutex::new(receiver));
+        let ret = Worker::new(
+            1,
+            addr.clone(),
+            settings,
+            Arc::clone(&receiver),
+            Duration::from_millis(1),
+            1,
+        );
+        assert!(ret.is_err())
+    }
+}

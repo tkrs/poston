@@ -65,7 +65,7 @@ impl WorkerPool {
                 Arc::clone(&receiver),
                 settings.flush_period,
                 settings.max_flush_entries,
-            );
+            )?;
             workers.push(wkr);
         }
 
