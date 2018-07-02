@@ -58,15 +58,29 @@ impl WorkerPool {
                 write_retry_max_delay: settings.write_retry_max_delay,
                 write_retry_timeout: settings.write_retry_timeout,
             };
-            let wkr = Worker::new(
+            match Worker::new(
                 id,
                 addr.clone(),
                 conn_settings,
                 Arc::clone(&receiver),
                 settings.flush_period,
                 settings.max_flush_entries,
-            );
-            workers.push(wkr);
+            ) {
+                Ok(wrk) => workers.push(wrk),
+                Err(e) => {
+                    for _ in &mut workers {
+                        let sender = sender.clone();
+                        let _ = sender.send(Message::Terminate);
+                    }
+                    for wkr in &mut workers {
+                        if let Some(h) = wkr.handler.take() {
+                            let _ = h.join();
+                        }
+                    }
+                    workers.clear();
+                    return Err(e);
+                }
+            };
         }
 
         Ok(WorkerPool {
