@@ -3,7 +3,7 @@ use emitter::Emitter;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::{self, Read};
-use std::net::{TcpStream, ToSocketAddrs};
+use std::net::{Shutdown, TcpStream, ToSocketAddrs};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -52,6 +52,15 @@ impl Worker {
                             Message::Terminate => {
                                 debug!("Worker {} received a terminate message.", id);
                                 wh.flush(&mut stream, None);
+                                match stream.stream.borrow_mut().shutdown(Shutdown::Both) {
+                                    Ok(_) => (),
+                                    Err(e) => {
+                                        error!(
+                                            "Worker {} occurred during terminating worker: {:?}.",
+                                            id, e
+                                        );
+                                    }
+                                }
                                 break;
                             }
                         },

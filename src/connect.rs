@@ -38,9 +38,9 @@ where
     S: Connect<S>,
     S: Write + Read + TcpConfig,
 {
-    addr: A,
-    stream: RefCell<S>,
-    settings: ConnectionSettings,
+    pub addr: A,
+    pub stream: RefCell<S>,
+    pub settings: ConnectionSettings,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
