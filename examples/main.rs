@@ -25,15 +25,15 @@ struct Human {
 lazy_static! {
     static ref POOL: Mutex<WorkerPool> = {
         let addr = "127.0.0.1:24224".to_string();
-        // let pool = WorkerPool::new(&"127.0.0.1:24224".to_string()).expect("Couldn't create the worker pool.");
         let settins = Settings {
             workers: 4,
             flush_period: Duration::from_millis(64),
             max_flush_entries: 5120,
+            connection_retry_timeout: Duration::from_secs(3),
             ..Default::default()
         };
-        let pool = WorkerPool::with_settings(&addr, &settins)
-            .expect("Couldn't create the worker pool.");
+        let pool =
+            WorkerPool::with_settings(&addr, &settins).expect("Couldn't create the worker pool.");
         Mutex::new(pool)
     };
 }
