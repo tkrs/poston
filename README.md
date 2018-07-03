@@ -1,7 +1,8 @@
 # poston
 
-[![CircleCI](https://circleci.com/gh/tkrs/poston.svg?style=svg)](https://circleci.com/gh/tkrs/poston)
 [![crates.io](https://meritbadge.herokuapp.com/poston)](https://crates.io/crates/poston)
+[![CircleCI](https://circleci.com/gh/tkrs/poston.svg?style=svg)](https://circleci.com/gh/tkrs/poston)
+[![Build status](https://ci.appveyor.com/api/projects/status/tnxmqxuc9jumfrpq/branch/master?svg=true)](https://ci.appveyor.com/project/tkrs/poston/branch/master)
 [![codecov](https://codecov.io/gh/tkrs/poston/branch/master/graph/badge.svg)](https://codecov.io/gh/tkrs/poston)
 
 
