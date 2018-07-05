@@ -1,7 +1,17 @@
 image: Visual Studio 2017
 
+cache:
+  - '%USERPROFILE%\.cargo'
+
 install:
-  - set PATH=C:\Ruby23\DevKit;C:\Ruby23\bin;C:\Users\appveyor\.cargo\bin;%PATH%
+  - set PATH=C:\Ruby23\DevKit;C:\Ruby23\bin;%USERPROFILE%\.cargo\bin;%PATH%
+  - if exist '%USERPROFILE%\.cargo\bin\rustup.exe' (
+      rustup.exe --default-host %TARGET% --default-toolchain %RUST_TOOLCHAIN% -y &&
+      rustup.exe self update
+    ) else (
+      curl -sSf -o rustup-init.exe https://win.rustup.rs &&
+      rustup-init.exe --default-host %TARGET% --default-toolchain %RUST_TOOLCHAIN% -y
+    )
   # - set FLUENTD_VERSION=1.2.2
   # - devkitvars.bat
   # - ruby -v
@@ -12,8 +22,6 @@ install:
   # - bundle exec rake build
   # - gem install pkg\fluentd-%FLUENTD_VERSION%.gem --no-ri --no-rdoc
   # - cd ..
-  - curl -sSf -o rustup-init.exe https://win.rustup.rs
-  - rustup-init.exe --default-host %TARGET% --default-toolchain %RUST_TOOLCHAIN% -y
   - rustc -Vv
   - cargo -V
 
