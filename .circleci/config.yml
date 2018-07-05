@@ -62,3 +62,15 @@ workflows:
       - stable
       - beta
       - nightly
+  schedule:
+    triggers:
+      - schedule:
+          cron: "0 0 * * *"
+          filters:
+            branches:
+              only:
+                - master
+    jobs:
+      - stable
+      - beta
+      - nightly
