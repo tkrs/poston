@@ -4,7 +4,7 @@ steps_template: &steps_template
     - run: apt-get update && apt-get -y install libssl-dev pkg-config cmake zlib1g-dev
     - restore_cache:
         keys:
-          - cargo-tarpaulin-{{ .Environment.CIRCLE_JOB }}-v0.6.3
+          - cargo-tarpaulin-{{ .Environment.CIRCLE_JOB }}-v0.6.5
     - restore_cache:
         keys:
           - deps-cargo-{{ .Environment.CIRCLE_JOB }}-{{ checksum "Cargo.toml" }}
@@ -23,7 +23,7 @@ steps_template: &steps_template
         cargo tarpaulin --out Xml
         bash <(curl -s https://codecov.io/bash)
     - save_cache:
-        key: cargo-tarpaulin-{{ .Environment.CIRCLE_JOB }}-v0.6.3
+        key: cargo-tarpaulin-{{ .Environment.CIRCLE_JOB }}-v0.6.5
         paths:
           - /usr/local/cargo/bin/cargo-tarpaulin
     - save_cache:
@@ -34,7 +34,7 @@ version: 2
 jobs:
   version:
     docker:
-      - image: quay.io/tkrs/docker-rust:1.27.0
+      - image: quay.io/tkrs/docker-rust:1.27.2
     <<: *steps_template
   stable:
     docker:
