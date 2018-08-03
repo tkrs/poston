@@ -52,8 +52,7 @@ fn main() {
             let mut rng = rand::thread_rng();
             for _ in 0..500_000 {
                 let name = String::from("tkrs");
-                let age: u32 =
-                    if rng.gen() { rng.gen_range(0, 100) } else { i };
+                let age: u32 = if rng.gen() { rng.gen_range(0, 100) } else { i };
 
                 let tag = format!("test.human.{}", i);
                 let a = Human { age, name };
