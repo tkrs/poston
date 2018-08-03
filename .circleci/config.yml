@@ -2,6 +2,7 @@ steps_template: &steps_template
   steps:
     - checkout
     - run: apt-get update && apt-get -y install libssl-dev pkg-config cmake zlib1g-dev
+    - run: rustup show
     - restore_cache:
         keys:
           - cargo-tarpaulin-{{ .Environment.CIRCLE_JOB }}-v0.6.5
