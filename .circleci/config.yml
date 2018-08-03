@@ -2,6 +2,7 @@ steps_template: &steps_template
   steps:
     - checkout
     - run: apt-get update && apt-get -y install libssl-dev pkg-config cmake zlib1g-dev
+    - run: rustup show
     - restore_cache:
         keys:
           - cargo-tarpaulin-{{ .Environment.CIRCLE_JOB }}-v0.6.5
@@ -18,7 +19,7 @@ steps_template: &steps_template
     - run: |
         if [ "${CIRCLE_JOB}" != "version" ]; then exit 0; fi
         if ! cargo tarpaulin --help > /dev/null 2>&1; then
-          RUSTFLAGS="--cfg procmacro2_semver_exempt" cargo install cargo-tarpaulin
+          RUSTFLAGS="--cfg procmacro2_semver_exempt" cargo install --force cargo-tarpaulin
         fi
         cargo tarpaulin --out Xml
         bash <(curl -s https://codecov.io/bash)
@@ -34,7 +35,7 @@ version: 2
 jobs:
   version:
     docker:
-      - image: quay.io/tkrs/docker-rust:1.27.2
+      - image: quay.io/tkrs/docker-rust:1.28.0
     <<: *steps_template
   stable:
     docker:
