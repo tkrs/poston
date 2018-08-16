@@ -1,11 +1,7 @@
 steps_template: &steps_template
   steps:
     - checkout
-    - run: apt-get update && apt-get -y install libssl-dev pkg-config cmake zlib1g-dev
     - run: rustup show
-    - restore_cache:
-        keys:
-          - cargo-tarpaulin-{{ .Environment.CIRCLE_JOB }}-v0.6.5
     - restore_cache:
         keys:
           - deps-cargo-{{ .Environment.CIRCLE_JOB }}-{{ checksum "Cargo.toml" }}
@@ -18,15 +14,8 @@ steps_template: &steps_template
     - run: cargo test --verbose --all
     - run: |
         if [ "${CIRCLE_JOB}" != "version" ]; then exit 0; fi
-        if ! cargo tarpaulin --help > /dev/null 2>&1; then
-          RUSTFLAGS="--cfg procmacro2_semver_exempt" cargo install --force cargo-tarpaulin
-        fi
         cargo tarpaulin --out Xml
         bash <(curl -s https://codecov.io/bash)
-    - save_cache:
-        key: cargo-tarpaulin-{{ .Environment.CIRCLE_JOB }}-v0.6.5
-        paths:
-          - /usr/local/cargo/bin/cargo-tarpaulin
     - save_cache:
         key: deps-cargo-{{ .Environment.CIRCLE_JOB }}-{{ checksum "Cargo.toml" }}
         paths:
