@@ -14,8 +14,8 @@ steps_template: &steps_template
     - run: cargo test --verbose --all
     - run: |
         if [ "${CIRCLE_JOB}" != "version" ]; then exit 0; fi
-        cargo tarpaulin --out Xml
-        bash <(curl -s https://codecov.io/bash)
+        cargo kcov -v --all
+        bash <(curl -s https://codecov.io/bash) -s ./target/cov
     - save_cache:
         key: deps-cargo-{{ .Environment.CIRCLE_JOB }}-{{ checksum "Cargo.toml" }}
         paths:
@@ -24,7 +24,7 @@ version: 2
 jobs:
   version:
     docker:
-      - image: quay.io/tkrs/docker-rust:1.28.0
+      - image: quay.io/tkrs/docker-rust:1.29.0
     <<: *steps_template
   stable:
     docker:
