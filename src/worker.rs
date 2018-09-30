@@ -70,7 +70,8 @@ impl Worker {
                         }
                     };
                 }
-            }).ok();
+            })
+            .ok();
 
         Ok(Worker { id, handler })
     }
