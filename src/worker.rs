@@ -94,13 +94,8 @@ impl WorkerHandler {
     where
         RW: ReconnectWrite + Read,
     {
-        for (tag, emitter) in self.emitters.borrow().iter() {
-            if let Err(e) = emitter.emit(rw, size) {
-                error!(
-                    "Tag: {}, an unexpected error occurred during emitting message: Caused by '{:?}'.",
-                    tag, e
-                );
-            }
+        for emitter in self.emitters.borrow().values() {
+            emitter.emit(rw, size)
         }
     }
 }

@@ -1,3 +1,4 @@
+use backoff::{Error as BError, ExponentialBackoff, Operation};
 use base64;
 use buffer::{self, Take};
 use connect::ReconnectWrite;
@@ -24,7 +25,7 @@ impl Emitter {
         q.push_back(elem)
     }
 
-    pub fn emit<RW>(&self, rw: &mut RW, size: Option<usize>) -> Result<(), Error>
+    pub fn emit<RW>(&self, rw: &mut RW, size: Option<usize>) -> ()
     where
         RW: ReconnectWrite + Read,
     {
@@ -33,25 +34,52 @@ impl Emitter {
 
         let mut queue = self.queue.borrow_mut();
         if queue.is_empty() {
-            return Ok(());
+            return ();
         }
         let size = size.unwrap_or_else(|| queue.len());
         let mut entries = Vec::with_capacity(size);
         queue.take(&mut entries);
 
-        buffer::pack_record(&mut buf, self.tag.as_str(), entries, chunk.as_str())?;
-
-        rw.write(buf).map_err(Error::NetworkError)?;
-        let mut resp_buf = [0u8; 64];
-        let resp_size = rw.read(&mut resp_buf).map_err(Error::NetworkError)?;
-
-        let reply = buffer::unpack_response(&resp_buf, resp_size)?;
-        if reply.ack == chunk {
-            Ok(())
-        } else {
-            Err(Error::AckUmatchedError(reply.ack, chunk))
+        let _ = buffer::pack_record(&mut buf, self.tag.as_str(), entries, chunk.as_str());
+        match write_and_read(rw, &buf, &chunk) {
+            Err(err) => error!(
+                "Tag: {}, an unexpected error occurred during emitting message: '{:?}'.",
+                self.tag, err
+            ),
+            _ => (),
         }
     }
+}
+
+fn write_and_read<RW>(rw: &mut RW, buf: &Vec<u8>, chunk: &String) -> Result<(), BError<Error>>
+where
+    RW: ReconnectWrite + Read,
+{
+    let mut op = || {
+        rw.write(buf.to_owned())
+            .map_err(Error::NetworkError)
+            .map_err(BError::Transient)?;
+        let mut resp_buf = [0u8; 64];
+        let to_write = rw
+            .read(&mut resp_buf)
+            .map_err(Error::NetworkError)
+            .map_err(BError::Transient)?;
+        if to_write == 0 {
+            Err(BError::Transient(Error::NoAckResponseError))
+        } else {
+            let reply = buffer::unpack_response(&resp_buf, to_write).map_err(BError::Transient)?;
+            if reply.ack == chunk.to_owned() {
+                Ok(())
+            } else {
+                Err(BError::Transient(Error::AckUmatchedError(
+                    reply.ack,
+                    chunk.to_string(),
+                )))
+            }
+        }
+    };
+    let mut backoff = ExponentialBackoff::default(); // TODO: Should be configurable.
+    op.retry(&mut backoff)
 }
 
 #[cfg(test)]

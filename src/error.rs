@@ -10,6 +10,7 @@ pub enum Error {
     AckUmatchedError(String, String),
     EmittingTimeoutError,
     ConnectingTimeoutError,
+    NoAckResponseError,
 }
 
 impl StdError for Error {
@@ -21,6 +22,7 @@ impl StdError for Error {
             Error::AckUmatchedError(_, _) => "request chunk and response ack-id did not match",
             Error::EmittingTimeoutError => "emitting timeout",
             Error::ConnectingTimeoutError => "connecting timeout",
+            Error::NoAckResponseError => "no ack response",
         }
     }
 }

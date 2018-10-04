@@ -1,3 +1,4 @@
+extern crate backoff;
 extern crate base64;
 #[macro_use]
 extern crate log;
