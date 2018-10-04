@@ -28,7 +28,7 @@ lazy_static! {
         let settins = Settings {
             workers: 4,
             flush_period: Duration::from_millis(64),
-            max_flush_entries: 5120,
+            max_flush_entries: 2000,
             connection_retry_timeout: Duration::from_secs(3),
             ..Default::default()
         };

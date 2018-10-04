@@ -16,6 +16,7 @@ circle-ci = { repository = "tkrs/poston" }
 maintenance = { status = "experimental" }
 
 [dependencies]
+backoff = "0.1.2"
 base64 = "0.9.2"
 log = "0.4.3"
 rmp = "0.8.7"
