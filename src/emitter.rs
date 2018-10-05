@@ -41,17 +41,16 @@ impl Emitter {
         queue.take(&mut entries);
 
         let _ = buffer::pack_record(&mut buf, self.tag.as_str(), entries, chunk.as_str());
-        match write_and_read(rw, &buf, &chunk) {
-            Err(err) => error!(
-                "Tag: {}, an unexpected error occurred during emitting message: '{:?}'.",
+        if let Err(err) = write_and_read(rw, &buf, &chunk) {
+            error!(
+                "Tag '{}', an unexpected error occurred during emitting message: '{:?}'.",
                 self.tag, err
-            ),
-            _ => (),
+            );
         }
     }
 }
 
-fn write_and_read<RW>(rw: &mut RW, buf: &Vec<u8>, chunk: &String) -> Result<(), RetryError<Error>>
+fn write_and_read<RW>(rw: &mut RW, buf: &[u8], chunk: &str) -> Result<(), RetryError<Error>>
 where
     RW: ReconnectWrite + Read,
 {
@@ -69,7 +68,7 @@ where
         } else {
             let reply =
                 buffer::unpack_response(&resp_buf, to_write).map_err(RetryError::Transient)?;
-            if reply.ack == chunk.to_owned() {
+            if reply.ack == chunk {
                 Ok(())
             } else {
                 Err(RetryError::Transient(Error::AckUmatchedError(
