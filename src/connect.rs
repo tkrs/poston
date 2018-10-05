@@ -1,7 +1,7 @@
+use backoff::{Error, ExponentialBackoff, Operation};
 use std::cell::RefCell;
 use std::io::{self, ErrorKind, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
-use std::thread;
 use std::time::{Duration, Instant};
 
 pub trait Connect<T>
@@ -158,30 +158,29 @@ where
     where
         A: ToSocketAddrs + Clone,
     {
-        let start = Instant::now();
-        let mut retry_delay = settings.connect_retry_initial_delay;
-        loop {
-            let r = C::connect(addr.clone());
-            match r {
-                Ok(s) => {
+        let mut backoff = ExponentialBackoff {
+            current_interval: settings.connect_retry_initial_delay,
+            initial_interval: settings.connect_retry_initial_delay,
+            max_interval: settings.connect_retry_max_delay,
+            max_elapsed_time: Some(settings.connect_retry_timeout),
+            ..Default::default()
+        };
+
+        let mut op = || {
+            C::connect(addr.clone())
+                .map(|s| {
                     s.set_nodelay(true).unwrap();
                     s.set_read_timeout(Some(settings.read_timeout)).unwrap();
                     s.set_write_timeout(Some(settings.write_timeout)).unwrap();
-                    return Ok(s);
-                }
-                e => {
-                    if Instant::now().duration_since(start) > settings.connect_retry_timeout {
-                        return e;
-                    }
-                    thread::sleep(retry_delay);
-                    if retry_delay >= settings.connect_retry_max_delay {
-                        retry_delay = settings.connect_retry_max_delay;
-                    } else {
-                        retry_delay = retry_delay + retry_delay;
-                    }
-                }
-            }
-        }
+                    s
+                })
+                .map_err(Error::Transient)
+        };
+
+        op.retry(&mut backoff).map_err(|err| match err {
+            Error::Transient(e) => e,
+            Error::Permanent(e) => e,
+        })
     }
 }
 
@@ -219,38 +218,39 @@ pub trait ReconnectWrite {
 
 impl<W: Write + Reconnect + WriteRetryDelay> ReconnectWrite for W {
     fn write(&mut self, buf: Vec<u8>) -> io::Result<()> {
-        let start = self.now();
-        let mut retry_delay = self.write_retry_initial_delay();
-        loop {
-            let r = self.write_all(&buf[..]);
-            if Instant::now().duration_since(start) > self.write_retry_timeout() {
-                return r;
-            }
-            retry_delay = if retry_delay >= self.write_retry_max_delay() {
-                self.write_retry_max_delay()
-            } else {
-                retry_delay + retry_delay
-            };
-            match r {
-                Ok(_) => return Ok(()),
-                Err(e) => {
-                    thread::sleep(retry_delay);
-                    debug!("Write error found {:?}.", e);
-                    // TODO: Consider handling by error kind
-                    match e.kind() {
-                        ErrorKind::BrokenPipe
-                        | ErrorKind::ConnectionRefused
-                        | ErrorKind::ConnectionAborted => {
-                            debug!("Try reconnect.");
-                            if let Err(e) = self.reconnect() {
-                                return Err(e);
-                            }
+        let mut backoff = ExponentialBackoff {
+            current_interval: self.write_retry_initial_delay(),
+            initial_interval: self.write_retry_initial_delay(),
+            max_interval: self.write_retry_max_delay(),
+            start_time: self.now(),
+            max_elapsed_time: Some(self.write_retry_timeout()),
+            ..Default::default()
+        };
+
+        let mut op = || -> Result<(), Error<io::Error>> {
+            self.write_all(&buf[..]).map_err(|e| {
+                debug!("Write error found {:?}.", e);
+                // TODO: Consider handling by error kind
+                match e.kind() {
+                    ErrorKind::BrokenPipe
+                    | ErrorKind::ConnectionRefused
+                    | ErrorKind::ConnectionAborted => {
+                        debug!("Try reconnect.");
+                        if let Err(e) = self.reconnect() {
+                            Error::Permanent(e)
+                        } else {
+                            Error::Transient(e)
                         }
-                        _ => {}
                     }
+                    _ => Error::Transient(e),
                 }
-            }
-        }
+            })
+        };
+
+        op.retry(&mut backoff).map_err(|e| match e {
+            Error::Transient(e) => e,
+            Error::Permanent(e) => e,
+        })
     }
 }
 

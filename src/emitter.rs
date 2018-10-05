@@ -1,4 +1,4 @@
-use backoff::{Error as BError, ExponentialBackoff, Operation};
+use backoff::{Error as RetryError, ExponentialBackoff, Operation};
 use base64;
 use buffer::{self, Take};
 use connect::ReconnectWrite;
@@ -51,27 +51,28 @@ impl Emitter {
     }
 }
 
-fn write_and_read<RW>(rw: &mut RW, buf: &Vec<u8>, chunk: &String) -> Result<(), BError<Error>>
+fn write_and_read<RW>(rw: &mut RW, buf: &Vec<u8>, chunk: &String) -> Result<(), RetryError<Error>>
 where
     RW: ReconnectWrite + Read,
 {
     let mut op = || {
         rw.write(buf.to_owned())
             .map_err(Error::NetworkError)
-            .map_err(BError::Transient)?;
+            .map_err(RetryError::Transient)?;
         let mut resp_buf = [0u8; 64];
         let to_write = rw
             .read(&mut resp_buf)
             .map_err(Error::NetworkError)
-            .map_err(BError::Transient)?;
+            .map_err(RetryError::Transient)?;
         if to_write == 0 {
-            Err(BError::Transient(Error::NoAckResponseError))
+            Err(RetryError::Transient(Error::NoAckResponseError))
         } else {
-            let reply = buffer::unpack_response(&resp_buf, to_write).map_err(BError::Transient)?;
+            let reply =
+                buffer::unpack_response(&resp_buf, to_write).map_err(RetryError::Transient)?;
             if reply.ack == chunk.to_owned() {
                 Ok(())
             } else {
-                Err(BError::Transient(Error::AckUmatchedError(
+                Err(RetryError::Transient(Error::AckUmatchedError(
                     reply.ack,
                     chunk.to_string(),
                 )))
