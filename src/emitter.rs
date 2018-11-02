@@ -15,7 +15,7 @@ pub struct Emitter {
 }
 
 impl Emitter {
-    pub fn new(tag: String) -> Emitter {
+    pub fn new(tag: String) -> Self {
         let queue = RefCell::new(VecDeque::new());
         Emitter { tag, queue }
     }
@@ -25,7 +25,7 @@ impl Emitter {
         q.push_back(elem)
     }
 
-    pub fn emit<RW>(&self, rw: &mut RW, size: Option<usize>) -> ()
+    pub fn emit<RW>(&self, rw: &mut RW, size: Option<usize>)
     where
         RW: ReconnectWrite + Read,
     {
@@ -34,7 +34,7 @@ impl Emitter {
 
         let mut queue = self.queue.borrow_mut();
         if queue.is_empty() {
-            return ();
+            return;
         }
         let size = size.unwrap_or_else(|| queue.len());
         let mut entries = Vec::with_capacity(size);
