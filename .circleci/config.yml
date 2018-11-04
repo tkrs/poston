@@ -1,4 +1,6 @@
 steps_template: &steps_template
+  environment:
+    - RUSTFLAGS: '-C link-dead-code'
   steps:
     - checkout
     - run: rustup show
