@@ -15,7 +15,7 @@ pub struct Worker {
 }
 
 impl Worker {
-    pub fn new<A>(
+    pub fn create<A>(
         id: usize,
         addr: A,
         conn_settings: ConnectionSettings,
@@ -112,7 +112,7 @@ mod tests {
     use std::sync::mpsc;
 
     #[test]
-    fn worker_new_should_return_err_when_the_connection_open_is_failed() {
+    fn worker_create_should_return_err_when_the_connection_open_is_failed() {
         let addr = "127.0.0.1:25";
         let settings = ConnectionSettings {
             connect_retry_initial_delay: Duration::new(0, 1),
@@ -122,7 +122,7 @@ mod tests {
         };
         let (_, receiver) = mpsc::channel();
         let receiver = Arc::new(Mutex::new(receiver));
-        let ret = Worker::new(
+        let ret = Worker::create(
             1,
             addr.clone(),
             settings,
