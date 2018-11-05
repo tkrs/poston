@@ -27,7 +27,7 @@ pub struct WorkerPool {
 }
 
 impl WorkerPool {
-    pub fn new<A>(addr: &A) -> io::Result<WorkerPool>
+    pub fn create<A>(addr: &A) -> io::Result<WorkerPool>
     where
         A: ToSocketAddrs + Clone,
         A: Send + 'static,
@@ -58,7 +58,7 @@ impl WorkerPool {
                 write_retry_max_delay: settings.write_retry_max_delay,
                 write_retry_timeout: settings.write_retry_timeout,
             };
-            match Worker::new(
+            match Worker::create(
                 id,
                 addr.clone(),
                 conn_settings,
