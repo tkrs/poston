@@ -9,7 +9,7 @@ steps_template: &steps_template
           - deps-cargo--{{ checksum "Cargo.toml" }}
           - deps-cargo--
     - run: cargo +nightly fmt -- --color=always --check
-    - run: if [ "${CIRCLE_JOB}" != "nightly" ]; then cargo clippy --all; fi
+    - run: if [ "${CIRCLE_JOB}" != "nightly" ]; then cargo clippy --all -- -D warnings; fi
     - run: cargo build --verbose --all
     - run: cargo test --verbose --all
     - run: |
