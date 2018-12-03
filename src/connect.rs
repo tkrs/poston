@@ -1,5 +1,6 @@
 use backoff::{Error, ExponentialBackoff, Operation};
 use std::cell::RefCell;
+use std::fmt::Debug;
 use std::io::{self, ErrorKind, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::{Duration, Instant};
@@ -10,7 +11,7 @@ where
 {
     fn connect<A>(addr: A) -> io::Result<T>
     where
-        A: ToSocketAddrs + Clone;
+        A: ToSocketAddrs + Clone + Debug;
 }
 
 pub trait TcpConfig {
@@ -33,7 +34,7 @@ pub trait ConnectRetryDelay {
 #[derive(Debug)]
 pub struct Stream<A, S>
 where
-    A: ToSocketAddrs + Clone,
+    A: ToSocketAddrs + Clone + Debug,
     S: ReconnectableWrite<S>,
     S: Connect<S>,
     S: Write + Read + TcpConfig,
@@ -58,7 +59,7 @@ pub struct ConnectionSettings {
 
 impl<A, S> Stream<A, S>
 where
-    A: ToSocketAddrs + Clone,
+    A: ToSocketAddrs + Clone + Debug,
     S: ReconnectableWrite<S>,
     S: Connect<S>,
     S: Write + Read + TcpConfig,
@@ -76,7 +77,7 @@ where
 
 impl<A, S> Reconnect for Stream<A, S>
 where
-    A: ToSocketAddrs + Clone,
+    A: ToSocketAddrs + Clone + Debug,
     S: ReconnectableWrite<S>,
     S: Connect<S>,
     S: Write + Read + TcpConfig,
@@ -90,7 +91,7 @@ where
 
 impl<A, S> Write for Stream<A, S>
 where
-    A: ToSocketAddrs + Clone,
+    A: ToSocketAddrs + Clone + Debug,
     S: ReconnectableWrite<S>,
     S: Connect<S>,
     S: Write + Read + TcpConfig,
@@ -106,7 +107,7 @@ where
 
 impl<A, S> Read for Stream<A, S>
 where
-    A: ToSocketAddrs + Clone,
+    A: ToSocketAddrs + Clone + Debug,
     S: ReconnectableWrite<S>,
     S: Connect<S>,
     S: Write + Read + TcpConfig,
@@ -133,7 +134,7 @@ impl TcpConfig for TcpStream {
 impl Connect<TcpStream> for TcpStream {
     fn connect<A>(addr: A) -> io::Result<TcpStream>
     where
-        A: ToSocketAddrs + Clone,
+        A: ToSocketAddrs + Clone + Debug,
     {
         TcpStream::connect(addr)
     }
@@ -146,7 +147,7 @@ where
 {
     fn connect_with_retry<A>(addr: A, settings: ConnectionSettings) -> io::Result<T>
     where
-        A: ToSocketAddrs + Clone;
+        A: ToSocketAddrs + Clone + Debug;
 }
 
 impl<C> ReconnectableWrite<C> for C
@@ -156,7 +157,7 @@ where
 {
     fn connect_with_retry<A>(addr: A, settings: ConnectionSettings) -> io::Result<C>
     where
-        A: ToSocketAddrs + Clone,
+        A: ToSocketAddrs + Clone + Debug,
     {
         let mut backoff = ExponentialBackoff {
             current_interval: settings.connect_retry_initial_delay,
@@ -167,7 +168,9 @@ where
         };
 
         let mut op = || {
-            C::connect(addr.clone())
+            let addr = addr.clone();
+            debug!("Start connect to {:?}.", addr);
+            C::connect(addr)
                 .map(|s| {
                     s.set_nodelay(true).unwrap();
                     s.set_read_timeout(Some(settings.read_timeout)).unwrap();
@@ -193,7 +196,7 @@ pub trait WriteRetryDelay {
 
 impl<A, S> WriteRetryDelay for Stream<A, S>
 where
-    A: ToSocketAddrs + Clone,
+    A: ToSocketAddrs + Clone + Debug,
     S: ReconnectableWrite<S>,
     S: Connect<S>,
     S: Write + Read + TcpConfig,
@@ -228,8 +231,9 @@ impl<W: Write + Reconnect + WriteRetryDelay> ReconnectWrite for W {
         };
 
         let mut op = || -> Result<(), Error<io::Error>> {
+            trace!("Start write entries.");
             self.write_all(&buf[..]).map_err(|e| {
-                debug!("Write error found {:?}.", e);
+                warn!("Write error found {:?}.", e);
                 // TODO: Consider handling by error kind
                 match e.kind() {
                     ErrorKind::BrokenPipe
@@ -248,8 +252,14 @@ impl<W: Write + Reconnect + WriteRetryDelay> ReconnectWrite for W {
         };
 
         op.retry(&mut backoff).map_err(|e| match e {
-            Error::Transient(e) => e,
-            Error::Permanent(e) => e,
+            Error::Transient(e) => {
+                warn!("Failed to write entries: {}", e);
+                e
+            }
+            Error::Permanent(e) => {
+                warn!("Failed to write entries: {}", e);
+                e
+            }
         })
     }
 }

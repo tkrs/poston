@@ -2,6 +2,7 @@ use connect::{ConnectionSettings, ReconnectWrite, Stream};
 use emitter::Emitter;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::io::{self, Read};
 use std::net::{Shutdown, TcpStream, ToSocketAddrs};
 use std::sync::mpsc;
@@ -24,13 +25,13 @@ impl Worker {
         flush_size: usize,
     ) -> io::Result<Worker>
     where
-        A: ToSocketAddrs + Clone,
+        A: ToSocketAddrs + Clone + Debug,
         A: Send + 'static,
     {
         let mut stream: Stream<A, TcpStream> = Stream::connect(addr, conn_settings)?;
 
         let emitters = RefCell::new(HashMap::new());
-        let wh = WorkerHandler { emitters };
+        let wh = WorkerHandler { id, emitters };
 
         let builder = thread::Builder::new().name(format!("fluent-worker-pool-{}", id));
         let handler = builder
@@ -47,6 +48,7 @@ impl Worker {
                                     trace!("Worker {} started flushing messages.", id);
                                     wh.flush(&mut stream, Some(flush_size));
                                     start = Instant::now();
+                                    trace!("Worker {} done flushing messages.", id);
                                 }
                             }
                             Message::Terminate => {
@@ -65,6 +67,7 @@ impl Worker {
                             }
                         },
                         Err(_) => {
+                            trace!("Worker {} start force flush messages.", id);
                             wh.flush(&mut stream, Some(flush_size));
                             start = Instant::now();
                         }
@@ -78,6 +81,7 @@ impl Worker {
 }
 
 struct WorkerHandler {
+    id: usize,
     emitters: RefCell<HashMap<String, Emitter>>,
 }
 
@@ -86,7 +90,7 @@ impl WorkerHandler {
         let mut emitters = self.emitters.borrow_mut();
         let emitter = emitters
             .entry(tag.clone())
-            .or_insert_with(|| Emitter::new(tag));
+            .or_insert_with(|| Emitter::new(self.id, tag));
         emitter.push((tm, msg));
     }
 

@@ -10,14 +10,15 @@ use std::time::SystemTime;
 use uuid::Uuid;
 
 pub struct Emitter {
+    id: usize,
     tag: String,
     queue: RefCell<VecDeque<(SystemTime, Vec<u8>)>>,
 }
 
 impl Emitter {
-    pub fn new(tag: String) -> Self {
+    pub fn new(id: usize, tag: String) -> Self {
         let queue = RefCell::new(VecDeque::new());
-        Emitter { tag, queue }
+        Emitter { id, tag, queue }
     }
 
     pub fn push(&self, elem: (SystemTime, Vec<u8>)) {
@@ -39,6 +40,12 @@ impl Emitter {
         let q_size = queue.len();
         let size = size.unwrap_or_else(|| q_size);
         let size = if q_size < size { q_size } else { size };
+        trace!(
+            "Worker {} Consuming entries; size: {} / {}",
+            self.id,
+            size,
+            q_size
+        );
         let mut entries = Vec::with_capacity(size);
         queue.take(&mut entries);
 
@@ -66,6 +73,7 @@ where
             .map_err(Error::NetworkError)
             .map_err(RetryError::Transient)?;
         if to_write == 0 {
+            warn!("Failed to received ack response. chunk: {}.", chunk);
             Err(RetryError::Transient(Error::NoAckResponseError))
         } else {
             let reply =
@@ -73,6 +81,10 @@ where
             if reply.ack == chunk {
                 Ok(())
             } else {
+                warn!(
+                    "Did not match ack and chunk. ack: {}, chunk: {}.",
+                    reply.ack, chunk
+                );
                 Err(RetryError::Transient(Error::AckUmatchedError(
                     reply.ack,
                     chunk.to_string(),

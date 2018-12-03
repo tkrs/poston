@@ -4,6 +4,7 @@ use rmps::encode::StructMapWriter;
 use rmps::Serializer;
 use serde::Serialize;
 use std::error::Error as StdError;
+use std::fmt::Debug;
 use std::io;
 use std::net::ToSocketAddrs;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -29,14 +30,14 @@ pub struct WorkerPool {
 impl WorkerPool {
     pub fn create<A>(addr: &A) -> io::Result<WorkerPool>
     where
-        A: ToSocketAddrs + Clone,
+        A: ToSocketAddrs + Clone + Debug,
         A: Send + 'static,
     {
         WorkerPool::with_settings(addr, &Default::default())
     }
     pub fn with_settings<A>(addr: &A, settings: &Settings) -> io::Result<WorkerPool>
     where
-        A: ToSocketAddrs + Clone,
+        A: ToSocketAddrs + Clone + Debug,
         A: Send + 'static,
     {
         assert!(settings.workers > 0);
@@ -96,8 +97,6 @@ impl Client for WorkerPool {
     where
         A: Serialize,
     {
-        trace!("Send a tag: {}", tag);
-
         if self.closed.load(Ordering::Acquire) {
             debug!("Workers are already closed.");
             return Ok(());
