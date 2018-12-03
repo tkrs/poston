@@ -36,7 +36,9 @@ impl Emitter {
         if queue.is_empty() {
             return;
         }
-        let size = size.unwrap_or_else(|| queue.len());
+        let q_size = queue.len();
+        let size = size.unwrap_or_else(|| q_size);
+        let size = if q_size < size { q_size } else { size };
         let mut entries = Vec::with_capacity(size);
         queue.take(&mut entries);
 
