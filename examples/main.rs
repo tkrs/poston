@@ -28,7 +28,7 @@ lazy_static! {
         let settins = Settings {
             workers: 1,
             flush_period: Duration::from_millis(10),
-            max_flush_entries: 1000,
+            max_flush_entries: 5000,
             connection_retry_timeout: Duration::from_secs(3),
             ..Default::default()
         };
@@ -47,10 +47,11 @@ fn main() {
 
     let start = Instant::now();
 
-    for i in 0..2 {
+    for i in 0..=2 {
         let t = thread::spawn(move || {
+            info!("Start sending messages. No {}", i);
             let mut rng = rand::thread_rng();
-            for _ in 0..500_000 {
+            for _ in 0..100_000 {
                 let name = String::from("tkrs");
                 let age: u32 = if rng.gen() { rng.gen_range(0, 100) } else { i };
 
@@ -67,8 +68,10 @@ fn main() {
     }
 
     for c in calls {
-        c.join().expect("Couldn't join on the associated thread");
+        c.join().expect("Couldn't join on the associated thread.");
     }
+
+    info!("End sending messages.");
 
     let mut pool = POOL.lock().expect("Client couldn't be locked.");
     pool.close();
