@@ -17,7 +17,7 @@ maintenance = { status = "experimental" }
 
 [dependencies]
 backoff = "0.1"
-base64 = "0.9"
+base64 = "0.10"
 log = "0.4"
 rmp = "0.8"
 rmp-serde = "0.13"
