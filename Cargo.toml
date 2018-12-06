@@ -27,8 +27,8 @@ uuid = { version = "0.7", features = ["v4"] }
 
 [dev-dependencies]
 pretty_env_logger = "0.2"
-lazy_static = "1.0"
-rand = "0.5"
+lazy_static = "1.2"
+rand = "0.6"
 
 [profile.dev]
 opt-level = 0
