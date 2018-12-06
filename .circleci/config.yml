@@ -9,7 +9,7 @@ steps_template: &steps_template
           - deps-cargo--{{ checksum "Cargo.toml" }}
           - deps-cargo--
     - run: cargo +nightly fmt -- --color=always --check
-    - run: if [ "${CIRCLE_JOB}" != "nightly" ]; then cargo clippy --all -- -D warnings; fi
+    - run: cargo +nightly clippy --all -- -D warnings
     - run: cargo build --verbose --all
     - run: cargo test --verbose --all
     - run: |
@@ -24,7 +24,7 @@ version: 2
 jobs:
   version:
     docker:
-      - image: quay.io/tkrs/docker-rust:1.30.1
+      - image: quay.io/tkrs/docker-rust:1.31.0
     <<: *steps_template
   stable:
     docker:

@@ -1,5 +1,5 @@
-use connect::{ConnectionSettings, ReconnectWrite, Stream};
-use emitter::Emitter;
+use crate::connect::{ConnectionSettings, ReconnectWrite, Stream};
+use crate::emitter::Emitter;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -112,7 +112,7 @@ pub enum Message {
 #[cfg(test)]
 mod tests {
     use self::super::*;
-    use connect::ConnectionSettings;
+    use crate::connect::ConnectionSettings;
     use std::sync::mpsc;
 
     #[test]

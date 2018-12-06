@@ -1,8 +1,8 @@
+use crate::buffer::{self, Take};
+use crate::connect::ReconnectWrite;
+use crate::error::Error;
 use backoff::{Error as RetryError, ExponentialBackoff, Operation};
 use base64;
-use buffer::{self, Take};
-use connect::ReconnectWrite;
-use error::Error;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::io::Read;

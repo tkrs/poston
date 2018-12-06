@@ -1,13 +1,13 @@
 #[macro_use]
 extern crate lazy_static;
-extern crate poston;
-extern crate rand;
-extern crate serde;
+
+use rand;
+
 #[macro_use]
 extern crate serde_derive;
 #[macro_use]
 extern crate log;
-extern crate pretty_env_logger;
+use pretty_env_logger;
 
 use rand::Rng;
 use std::sync::Mutex;
