@@ -1,7 +1,8 @@
-use connect;
-use error::Error;
-use rmps::encode::StructMapWriter;
-use rmps::Serializer;
+use crate::connect;
+use crate::error::Error;
+use crate::rmps::encode::StructMapWriter;
+use crate::rmps::Serializer;
+use crate::worker::{Message, Worker};
 use serde::Serialize;
 use std::error::Error as StdError;
 use std::fmt::Debug;
@@ -11,7 +12,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
-use worker::{Message, Worker};
 
 pub trait Client {
     fn send<A>(&self, tag: String, a: &A, timestamp: SystemTime) -> Result<(), Error>

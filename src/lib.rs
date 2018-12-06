@@ -1,13 +1,9 @@
-extern crate backoff;
-extern crate base64;
 #[macro_use]
 extern crate log;
-extern crate rmp;
-extern crate rmp_serde as rmps;
-extern crate serde;
 #[macro_use]
 extern crate serde_derive;
-extern crate uuid;
+
+use rmp_serde as rmps;
 
 pub mod client;
 
@@ -18,4 +14,4 @@ mod error;
 mod time_pack;
 mod worker;
 
-pub use client::{Client, Settings, WorkerPool};
+pub use crate::client::{Client, Settings, WorkerPool};
