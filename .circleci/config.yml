@@ -8,8 +8,8 @@ steps_template: &steps_template
           - deps-cargo-{{ .Environment.CIRCLE_JOB }}-
           - deps-cargo--{{ checksum "Cargo.toml" }}
           - deps-cargo--
-    - run: cargo +nightly fmt -- --color=always --check
-    - run: cargo +nightly clippy --all -- -D warnings
+    - run: cargo fmt -- --color=always --check
+    - run: cargo clippy --all -- -D warnings
     - run: cargo build --verbose --all
     - run: cargo test --verbose --all
     - run: |
