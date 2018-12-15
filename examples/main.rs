@@ -1,20 +1,17 @@
 #[macro_use]
 extern crate lazy_static;
-
-use rand;
-
-#[macro_use]
-extern crate serde_derive;
 #[macro_use]
 extern crate log;
-use pretty_env_logger;
+#[macro_use]
+extern crate serde_derive;
 
-use rand::Rng;
+use poston::{Client, Settings, WorkerPool};
+use pretty_env_logger;
+use rand::prelude::*;
+use rand::{self, distributions::Alphanumeric};
 use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
-
-use poston::{Client, Settings, WorkerPool};
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 struct Human {
@@ -28,7 +25,7 @@ lazy_static! {
         let settins = Settings {
             workers: 1,
             flush_period: Duration::from_millis(10),
-            max_flush_entries: 5000,
+            max_flush_entries: 1000,
             connection_retry_timeout: Duration::from_secs(3),
             ..Default::default()
         };
@@ -47,21 +44,23 @@ fn main() {
 
     let start = Instant::now();
 
-    for i in 0..=2 {
+    for i in 0..10 {
         let t = thread::spawn(move || {
-            info!("Start sending messages. No {}", i);
-            let mut rng = rand::thread_rng();
-            for _ in 0..100_000 {
-                let name = String::from("tkrs");
-                let age: u32 = if rng.gen() { rng.gen_range(0, 100) } else { i };
+            info!("Start sending messages. No {}.", i);
+            let mut rng = thread_rng();
+            for _ in 0..10_000 {
+                let name: String = rng.sample_iter(&Alphanumeric).take(30).collect();
+                let age: u32 = rng.gen_range(1, 100);
 
-                let tag = format!("test.human.{}", i);
+                let tag = format!("test.human.age.{}", &age);
                 let a = Human { age, name };
                 let timestamp = SystemTime::now();
 
                 let pool = POOL.lock().expect("Client couldn't be locked.");
                 pool.send(tag, &a, timestamp).unwrap();
-                thread::sleep(Duration::new(0, 5));
+
+                let dur = rng.gen_range(10, 500000);
+                thread::sleep(Duration::new(0, dur));
             }
         });
         calls.push(t);
