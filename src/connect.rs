@@ -154,6 +154,9 @@ where
 
             if read_size == 0 {
                 warn!("Received empty response, chunk: {}.", chunk);
+                if let Err(err) = self.reconnect() {
+                    warn!("Failed to reconnect: {:?}.", err);
+                }
                 Err(Error::Transient(MyError::NoAckResponseError))
             } else {
                 let reply =
