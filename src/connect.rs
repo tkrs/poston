@@ -1,9 +1,11 @@
+use crate::buffer;
+use crate::error::Error as MyError;
 use backoff::{Error, ExponentialBackoff, Operation};
 use std::cell::RefCell;
 use std::fmt::Debug;
-use std::io::{self, ErrorKind, Read, Write};
+use std::io::{self, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 pub trait Connect<T>
 where
@@ -25,20 +27,17 @@ pub trait Reconnect {
 }
 
 pub trait ConnectRetryDelay {
-    fn now(&self) -> Instant;
     fn connect_retry_initial_delay(&self) -> Duration;
     fn connect_retry_timeout(&self) -> Duration;
     fn connect_retry_max_delay(&self) -> Duration;
 }
 
+pub trait WriteRead {
+    fn write_and_read(&mut self, buf: &[u8], chunk: &str) -> Result<(), Error<MyError>>;
+}
+
 #[derive(Debug)]
-pub struct Stream<A, S>
-where
-    A: ToSocketAddrs + Clone + Debug,
-    S: ReconnectableWrite<S>,
-    S: Connect<S>,
-    S: Write + Read + TcpConfig,
-{
+pub struct Stream<A, S> {
     pub addr: A,
     pub stream: RefCell<S>,
     pub settings: ConnectionSettings,
@@ -60,12 +59,10 @@ pub struct ConnectionSettings {
 impl<A, S> Stream<A, S>
 where
     A: ToSocketAddrs + Clone + Debug,
-    S: ReconnectableWrite<S>,
-    S: Connect<S>,
-    S: Write + Read + TcpConfig,
+    S: Connect<S> + TcpConfig,
 {
     pub fn connect(addr: A, settings: ConnectionSettings) -> io::Result<Stream<A, S>> {
-        let stream = S::connect_with_retry(addr.clone(), settings)?;
+        let stream = connect_with_retry(addr.clone(), settings)?;
         let stream = RefCell::new(stream);
         Ok(Stream {
             addr,
@@ -73,17 +70,25 @@ where
             settings,
         })
     }
+
+    fn write_retry_initial_delay(&self) -> Duration {
+        self.settings.write_retry_initial_delay
+    }
+    fn write_retry_timeout(&self) -> Duration {
+        self.settings.write_retry_timeout
+    }
+    fn write_retry_max_delay(&self) -> Duration {
+        self.settings.write_retry_max_delay
+    }
 }
 
 impl<A, S> Reconnect for Stream<A, S>
 where
     A: ToSocketAddrs + Clone + Debug,
-    S: ReconnectableWrite<S>,
-    S: Connect<S>,
-    S: Write + Read + TcpConfig,
+    S: Connect<S> + TcpConfig,
 {
     fn reconnect(&mut self) -> io::Result<()> {
-        let stream = S::connect_with_retry(self.addr.clone(), self.settings)?;
+        let stream = connect_with_retry(self.addr.clone(), self.settings)?;
         *self.stream.borrow_mut() = stream;
         Ok(())
     }
@@ -91,10 +96,7 @@ where
 
 impl<A, S> Write for Stream<A, S>
 where
-    A: ToSocketAddrs + Clone + Debug,
-    S: ReconnectableWrite<S>,
-    S: Connect<S>,
-    S: Write + Read + TcpConfig,
+    S: Write,
 {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.stream.borrow_mut().write(buf)
@@ -107,13 +109,74 @@ where
 
 impl<A, S> Read for Stream<A, S>
 where
-    A: ToSocketAddrs + Clone + Debug,
-    S: ReconnectableWrite<S>,
-    S: Connect<S>,
-    S: Write + Read + TcpConfig,
+    S: Read,
 {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.stream.borrow_mut().read(buf)
+    }
+}
+
+impl<A, S> WriteRead for Stream<A, S>
+where
+    A: ToSocketAddrs + Clone + Debug,
+    S: Connect<S> + TcpConfig + Read + Write,
+{
+    fn write_and_read(&mut self, buf: &[u8], chunk: &str) -> Result<(), Error<MyError>> {
+        let mut backoff = ExponentialBackoff {
+            current_interval: self.write_retry_initial_delay(),
+            initial_interval: self.write_retry_initial_delay(),
+            max_interval: self.write_retry_max_delay(),
+            max_elapsed_time: Some(self.write_retry_timeout()),
+            ..Default::default()
+        };
+
+        let mut op = || {
+            if let Err(err) = self.write(buf) {
+                warn!(
+                    "Failed to write message, chunk: {}. cause: {:?}.",
+                    chunk, err
+                );
+                let e = match err.kind() {
+                    io::ErrorKind::BrokenPipe
+                    | io::ErrorKind::NotConnected
+                    | io::ErrorKind::ConnectionRefused
+                    | io::ErrorKind::ConnectionAborted => self.reconnect(),
+                    _ => Err(err),
+                };
+                return e.map_err(|e| Error::Transient(MyError::NetworkError(e)));
+            }
+
+            let mut resp_buf = [0u8; 64];
+            let read_size = self.read(&mut resp_buf).map_err(|e| {
+                warn!("Failed to read response, chunk: {}, cause: {:?}.", chunk, e);
+                Error::Transient(MyError::NetworkError(e))
+            })?;
+
+            if read_size == 0 {
+                warn!("Received empty response, chunk: {}.", chunk);
+                Err(Error::Transient(MyError::NoAckResponseError))
+            } else {
+                let reply =
+                    buffer::unpack_response(&resp_buf, read_size).map_err(Error::Transient)?;
+                if reply.ack == chunk {
+                    Ok(())
+                } else {
+                    warn!(
+                        "Did not match ack and chunk, ack: {}, chunk: {}.",
+                        reply.ack, chunk
+                    );
+                    if let Err(err) = self.reconnect() {
+                        warn!("Failed to reconnect: {:?}.", err);
+                    }
+                    Err(Error::Transient(MyError::AckUmatchedError(
+                        reply.ack,
+                        chunk.to_string(),
+                    )))
+                }
+            }
+        };
+
+        op.retry(&mut backoff)
     }
 }
 
@@ -140,135 +203,45 @@ impl Connect<TcpStream> for TcpStream {
     }
 }
 
-pub trait ReconnectableWrite<T>
-where
-    T: Connect<T>,
-    T: Write + Read + TcpConfig,
-{
-    fn connect_with_retry<A>(addr: A, settings: ConnectionSettings) -> io::Result<T>
-    where
-        A: ToSocketAddrs + Clone + Debug;
-}
-
-impl<C> ReconnectableWrite<C> for C
-where
-    C: Connect<C>,
-    C: Write + Read + TcpConfig,
-{
-    fn connect_with_retry<A>(addr: A, settings: ConnectionSettings) -> io::Result<C>
-    where
-        A: ToSocketAddrs + Clone + Debug,
-    {
-        let mut backoff = ExponentialBackoff {
-            current_interval: settings.connect_retry_initial_delay,
-            initial_interval: settings.connect_retry_initial_delay,
-            max_interval: settings.connect_retry_max_delay,
-            max_elapsed_time: Some(settings.connect_retry_timeout),
-            ..Default::default()
-        };
-
-        let mut op = || {
-            let addr = addr.clone();
-            debug!("Start connect to {:?}.", addr);
-            C::connect(addr)
-                .map(|s| {
-                    s.set_nodelay(true).unwrap();
-                    s.set_read_timeout(Some(settings.read_timeout)).unwrap();
-                    s.set_write_timeout(Some(settings.write_timeout)).unwrap();
-                    s
-                })
-                .map_err(Error::Transient)
-        };
-
-        op.retry(&mut backoff).map_err(|err| match err {
-            Error::Transient(e) => e,
-            Error::Permanent(e) => e,
-        })
-    }
-}
-
-pub trait WriteRetryDelay {
-    fn now(&self) -> Instant;
-    fn write_retry_initial_delay(&self) -> Duration;
-    fn write_retry_timeout(&self) -> Duration;
-    fn write_retry_max_delay(&self) -> Duration;
-}
-
-impl<A, S> WriteRetryDelay for Stream<A, S>
+fn connect_with_retry<C, A>(addr: A, settings: ConnectionSettings) -> io::Result<C>
 where
     A: ToSocketAddrs + Clone + Debug,
-    S: ReconnectableWrite<S>,
-    S: Connect<S>,
-    S: Write + Read + TcpConfig,
+    C: Connect<C> + TcpConfig,
 {
-    fn now(&self) -> Instant {
-        Instant::now()
-    }
-    fn write_retry_initial_delay(&self) -> Duration {
-        self.settings.write_retry_initial_delay
-    }
-    fn write_retry_timeout(&self) -> Duration {
-        self.settings.write_retry_timeout
-    }
-    fn write_retry_max_delay(&self) -> Duration {
-        self.settings.write_retry_max_delay
-    }
-}
+    let mut backoff = ExponentialBackoff {
+        current_interval: settings.connect_retry_initial_delay,
+        initial_interval: settings.connect_retry_initial_delay,
+        max_interval: settings.connect_retry_max_delay,
+        max_elapsed_time: Some(settings.connect_retry_timeout),
+        ..Default::default()
+    };
 
-pub trait ReconnectWrite {
-    fn write(&mut self, buf: Vec<u8>) -> io::Result<()>;
-}
-
-impl<W: Write + Reconnect + WriteRetryDelay> ReconnectWrite for W {
-    fn write(&mut self, buf: Vec<u8>) -> io::Result<()> {
-        let mut backoff = ExponentialBackoff {
-            current_interval: self.write_retry_initial_delay(),
-            initial_interval: self.write_retry_initial_delay(),
-            max_interval: self.write_retry_max_delay(),
-            start_time: self.now(),
-            max_elapsed_time: Some(self.write_retry_timeout()),
-            ..Default::default()
-        };
-
-        let mut op = || -> Result<(), Error<io::Error>> {
-            trace!("Start write entries.");
-            self.write_all(&buf[..]).map_err(|e| {
-                warn!("Write error found {:?}.", e);
-                // TODO: Consider handling by error kind
-                match e.kind() {
-                    ErrorKind::BrokenPipe
-                    | ErrorKind::NotConnected
-                    | ErrorKind::ConnectionRefused
-                    | ErrorKind::ConnectionAborted => {
-                        debug!("Try reconnect.");
-                        if let Err(e) = self.reconnect() {
-                            Error::Permanent(e)
-                        } else {
-                            Error::Transient(e)
-                        }
-                    }
-                    _ => Error::Transient(e),
-                }
+    let mut op = || {
+        let addr = addr.clone();
+        debug!("Start connect to {:?}.", addr);
+        C::connect(&addr)
+            .map(|s| {
+                s.set_nodelay(true).unwrap();
+                s.set_read_timeout(Some(settings.read_timeout)).unwrap();
+                s.set_write_timeout(Some(settings.write_timeout)).unwrap();
+                s
             })
-        };
+            .map_err(|err| {
+                warn!("Failed to connect to {:?}.", addr);
+                Error::Transient(err)
+            })
+    };
 
-        op.retry(&mut backoff).map_err(|e| match e {
-            Error::Transient(e) => {
-                warn!("Failed to write entries: {}", e);
-                e
-            }
-            Error::Permanent(e) => {
-                warn!("Failed to write entries: {}", e);
-                e
-            }
-        })
-    }
+    op.retry(&mut backoff).map_err(|err| match err {
+        Error::Transient(e) => e,
+        Error::Permanent(e) => e,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::{io, Duration, ToSocketAddrs};
-    use super::{Connect, ConnectionSettings, Reconnect, ReconnectWrite, Stream, TcpConfig};
+    use super::{Connect, ConnectionSettings, Reconnect, Stream, TcpConfig};
 
     mod s {
         use super::*;
@@ -365,66 +338,4 @@ mod tests {
         let mut ret = Stream::<String, s::TestStream>::connect(addr, settings).unwrap();
         ret.reconnect().unwrap();
     }
-
-    #[test]
-    fn write() {
-        let addr = "127.0.0.1:80".to_string();
-        let settings = ConnectionSettings {
-            connect_retry_initial_delay: Duration::new(0, 1),
-            connect_retry_max_delay: Duration::new(0, 1),
-            connect_retry_timeout: Duration::from_millis(100),
-            write_retry_initial_delay: Duration::new(0, 1),
-            write_retry_max_delay: Duration::new(0, 1),
-            write_retry_timeout: Duration::from_millis(10),
-            ..Default::default()
-        };
-        let mut ret = Stream::<String, s::TestStream>::connect(addr, settings).unwrap();
-        let mut msg = Vec::new();
-        msg.push(0x00);
-        msg.push(0x01);
-        msg.push(0x02);
-        ret.write(msg).unwrap();
-    }
-
-    #[test]
-    fn write_giveup() {
-        let addr = "127.0.0.1:80".to_string();
-        let settings = ConnectionSettings {
-            connect_retry_initial_delay: Duration::new(0, 1),
-            connect_retry_max_delay: Duration::new(0, 1),
-            connect_retry_timeout: Duration::from_millis(10),
-            write_retry_initial_delay: Duration::new(0, 1),
-            write_retry_max_delay: Duration::new(0, 1),
-            write_retry_timeout: Duration::new(0, 5),
-            ..Default::default()
-        };
-        let mut ret = Stream::<String, s::TestStream>::connect(addr, settings).unwrap();
-        let mut msg = Vec::new();
-        msg.push(0x00);
-        msg.push(0x01);
-        msg.push(0x02);
-        let err = ret.write(msg).err().unwrap();
-        assert_eq!(err.kind(), io::ErrorKind::TimedOut)
-    }
-
-    //    #[test]
-    //    fn write_reconnect_fail() {
-    //        let addr = "a".to_string();
-    //        let settings = ConnectionSettings {
-    //            connect_retry_initial_delay: Duration::new(0, 1),
-    //            connect_retry_max_delay: Duration::new(0, 1),
-    //            connect_retry_timeout: Duration::new(0, 3),
-    //            write_retry_initial_delay: Duration::new(0, 1),
-    //            write_retry_max_delay: Duration::new(0, 1),
-    //            write_retry_timeout: Duration::from_millis(5),
-    //            ..Default::default()
-    //        };
-    //        let mut ret = Stream::<String, s::TestStream>::connect(addr, settings).unwrap();
-    //        let mut msg = Vec::new();
-    //        msg.push(0x00);
-    //        msg.push(0x01);
-    //        msg.push(0x02);
-    //        let err = ret.write(msg).err().unwrap();
-    //        assert_eq!(err.kind(), io::ErrorKind::ConnectionRefused)
-    //    }
 }

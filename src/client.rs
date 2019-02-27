@@ -48,7 +48,7 @@ impl WorkerPool {
         let receiver = Arc::new(Mutex::new(receiver));
 
         for id in 0..settings.workers {
-            debug!("Worker {} creating...", id);
+            info!("Worker {} creating...", id);
             let conn_settings = connect::ConnectionSettings {
                 connect_retry_initial_delay: settings.connection_retry_initial_delay,
                 connect_retry_max_delay: settings.connection_retry_max_delay,
@@ -113,21 +113,21 @@ impl Client for WorkerPool {
 
     fn close(&mut self) {
         if self.closed.fetch_or(true, Ordering::SeqCst) {
-            debug!("Workers are already closed.");
+            info!("Workers are already closed.");
             return;
         }
 
-        debug!("Sending terminate message to all workers.");
+        info!("Sending terminate message to all workers.");
 
         for _ in &mut self.workers {
             let sender = self.sender.clone();
             sender.send(Message::Terminate).unwrap();
         }
 
-        debug!("Shutting down all workers.");
+        info!("Shutting down all workers.");
 
         for wkr in &mut self.workers {
-            debug!("Shutting down worker {}", wkr.id);
+            info!("Shutting down worker {}", wkr.id);
 
             if let Some(w) = wkr.handler.take() {
                 w.join().unwrap();
