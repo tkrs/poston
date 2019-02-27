@@ -237,6 +237,7 @@ impl<W: Write + Reconnect + WriteRetryDelay> ReconnectWrite for W {
                 // TODO: Consider handling by error kind
                 match e.kind() {
                     ErrorKind::BrokenPipe
+                    | ErrorKind::NotConnected
                     | ErrorKind::ConnectionRefused
                     | ErrorKind::ConnectionAborted => {
                         debug!("Try reconnect.");
