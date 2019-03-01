@@ -197,11 +197,10 @@ where
             // And in this case even if retry writing, 0 is returned unless the connection reconnects.
             if read_size == 0 {
                 warn!("Received empty response, chunk: {}.", chunk);
+                thread::sleep(Duration::from_secs(5));
                 if let Err(err) = self.reconnect() {
                     warn!("Failed to reconnect: {:?}.", err);
                 }
-
-                thread::sleep(Duration::from_secs(5));
                 Err(Error::Transient(MyError::NoAckResponseError))
             } else {
                 let reply =
