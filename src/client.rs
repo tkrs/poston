@@ -175,7 +175,7 @@ impl Default for Settings {
             connection_retry_timeout: Duration::from_secs(60),
             write_retry_initial_delay: Duration::from_millis(5),
             write_retry_max_delay: Duration::from_secs(5),
-            write_retry_timeout: Duration::from_secs(10),
+            write_retry_timeout: Duration::from_secs(30),
             read_retry_initial_delay: Duration::from_millis(5),
             read_retry_max_delay: Duration::from_secs(5),
             read_retry_timeout: Duration::from_secs(10),
