@@ -1,9 +1,9 @@
-use crate::connect::{ConnectionSettings, ReconnectWrite, Stream};
+use crate::connect::*;
 use crate::emitter::Emitter;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::io::{self, Read};
+use std::io;
 use std::net::{Shutdown, TcpStream, ToSocketAddrs};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -52,7 +52,7 @@ impl Worker {
                                 }
                             }
                             Message::Terminate => {
-                                debug!("Worker {} received a terminate message.", id);
+                                info!("Worker {} received a terminate message.", id);
                                 wh.flush(&mut stream, None);
                                 match stream.stream.borrow_mut().shutdown(Shutdown::Both) {
                                     Ok(_) => (),
@@ -96,7 +96,7 @@ impl WorkerHandler {
 
     fn flush<RW>(&self, rw: &mut RW, size: Option<usize>)
     where
-        RW: ReconnectWrite + Read,
+        RW: Reconnect + WriteRead,
     {
         for emitter in self.emitters.borrow().values() {
             emitter.emit(rw, size)

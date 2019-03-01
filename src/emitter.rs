@@ -1,11 +1,8 @@
 use crate::buffer::{self, Take};
-use crate::connect::ReconnectWrite;
-use crate::error::Error;
-use backoff::{Error as RetryError, ExponentialBackoff, Operation};
+use crate::connect::*;
 use base64;
 use std::cell::RefCell;
 use std::collections::VecDeque;
-use std::io::Read;
 use std::time::SystemTime;
 use uuid::Uuid;
 
@@ -26,10 +23,7 @@ impl Emitter {
         q.push_back(elem)
     }
 
-    pub fn emit<RW>(&self, rw: &mut RW, size: Option<usize>)
-    where
-        RW: ReconnectWrite + Read,
-    {
+    pub fn emit<RW: WriteRead>(&self, rw: &mut RW, size: Option<usize>) {
         let chunk = base64::encode(&Uuid::new_v4().to_string());
         let mut buf = Vec::new();
 
@@ -50,50 +44,13 @@ impl Emitter {
         queue.take(&mut entries);
 
         let _ = buffer::pack_record(&mut buf, self.tag.as_str(), entries, chunk.as_str());
-        if let Err(err) = write_and_read(rw, &buf, &chunk) {
+        if let Err(err) = rw.write_and_read(&buf, &chunk) {
             error!(
                 "Tag '{}', an unexpected error occurred during emitting message: '{:?}'.",
                 self.tag, err
             );
         }
     }
-}
-
-fn write_and_read<RW>(rw: &mut RW, buf: &[u8], chunk: &str) -> Result<(), RetryError<Error>>
-where
-    RW: ReconnectWrite + Read,
-{
-    let mut op = || {
-        rw.write(buf.to_owned())
-            .map_err(Error::NetworkError)
-            .map_err(RetryError::Transient)?;
-        let mut resp_buf = [0u8; 64];
-        let to_write = rw
-            .read(&mut resp_buf)
-            .map_err(Error::NetworkError)
-            .map_err(RetryError::Transient)?;
-        if to_write == 0 {
-            warn!("Failed to received ack response. chunk: {}.", chunk);
-            Err(RetryError::Transient(Error::NoAckResponseError))
-        } else {
-            let reply =
-                buffer::unpack_response(&resp_buf, to_write).map_err(RetryError::Transient)?;
-            if reply.ack == chunk {
-                Ok(())
-            } else {
-                warn!(
-                    "Did not match ack and chunk. ack: {}, chunk: {}.",
-                    reply.ack, chunk
-                );
-                Err(RetryError::Transient(Error::AckUmatchedError(
-                    reply.ack,
-                    chunk.to_string(),
-                )))
-            }
-        }
-    };
-    let mut backoff = ExponentialBackoff::default(); // TODO: Should be configurable.
-    op.retry(&mut backoff)
 }
 
 #[cfg(test)]
