@@ -11,7 +11,7 @@ steps_template: &steps_template
     - run: cargo fmt -- --color=always --check
     - run: cargo clippy --all -- -D warnings
     - run: cargo build --verbose --all
-    - run: cargo test --verbose --all
+    - run: RUST_LOG="poston=trace" cargo test --verbose --all
     - run: |
         if [ "${CIRCLE_JOB}" != "version" ]; then exit 0; fi
         cargo kcov -v --all
