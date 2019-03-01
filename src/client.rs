@@ -58,6 +58,9 @@ impl WorkerPool {
                 write_retry_initial_delay: settings.write_retry_initial_delay,
                 write_retry_max_delay: settings.write_retry_max_delay,
                 write_retry_timeout: settings.write_retry_timeout,
+                read_retry_initial_delay: settings.read_retry_initial_delay,
+                read_retry_max_delay: settings.read_retry_max_delay,
+                read_retry_timeout: settings.read_retry_timeout,
             };
             match Worker::create(
                 id,
@@ -151,10 +154,14 @@ pub struct Settings {
     pub connection_retry_max_delay: Duration,
     pub connection_retry_timeout: Duration,
     pub write_timeout: Duration,
+    pub read_timeout: Duration,
+
     pub write_retry_initial_delay: Duration,
     pub write_retry_max_delay: Duration,
     pub write_retry_timeout: Duration,
-    pub read_timeout: Duration,
+    pub read_retry_initial_delay: Duration,
+    pub read_retry_max_delay: Duration,
+    pub read_retry_timeout: Duration,
 }
 
 impl Default for Settings {
@@ -169,6 +176,9 @@ impl Default for Settings {
             write_retry_initial_delay: Duration::from_millis(5),
             write_retry_max_delay: Duration::from_secs(5),
             write_retry_timeout: Duration::from_secs(10),
+            read_retry_initial_delay: Duration::from_millis(5),
+            read_retry_max_delay: Duration::from_secs(5),
+            read_retry_timeout: Duration::from_secs(10),
             write_timeout: Duration::from_secs(1),
             read_timeout: Duration::from_secs(1),
         }

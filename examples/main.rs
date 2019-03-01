@@ -26,7 +26,9 @@ lazy_static! {
             workers: 1,
             flush_period: Duration::from_millis(10),
             max_flush_entries: 1000,
-            connection_retry_timeout: Duration::from_secs(3),
+            connection_retry_timeout: Duration::from_secs(60),
+            write_timeout: Duration::from_secs(30),
+            read_timeout: Duration::from_secs(30),
             ..Default::default()
         };
         let pool =

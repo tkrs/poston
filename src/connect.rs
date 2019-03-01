@@ -5,6 +5,7 @@ use std::cell::RefCell;
 use std::fmt::Debug;
 use std::io::{self, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
+use std::thread;
 use std::time::Duration;
 
 pub trait Connect<T>
@@ -54,6 +55,10 @@ pub struct ConnectionSettings {
     pub write_retry_timeout: Duration,
     pub write_retry_max_delay: Duration,
     pub write_retry_initial_delay: Duration,
+
+    pub read_retry_timeout: Duration,
+    pub read_retry_max_delay: Duration,
+    pub read_retry_initial_delay: Duration,
 }
 
 impl<A, S> Stream<A, S>
@@ -80,6 +85,16 @@ where
     fn write_retry_max_delay(&self) -> Duration {
         self.settings.write_retry_max_delay
     }
+
+    fn read_retry_initial_delay(&self) -> Duration {
+        self.settings.read_retry_initial_delay
+    }
+    fn read_retry_timeout(&self) -> Duration {
+        self.settings.read_retry_timeout
+    }
+    fn read_retry_max_delay(&self) -> Duration {
+        self.settings.read_retry_max_delay
+    }
 }
 
 impl<A, S> Reconnect for Stream<A, S>
@@ -88,8 +103,10 @@ where
     S: Connect<S> + TcpConfig,
 {
     fn reconnect(&mut self) -> io::Result<()> {
+        debug!("Start reconnect().");
         let stream = connect_with_retry(self.addr.clone(), self.settings)?;
         *self.stream.borrow_mut() = stream;
+        debug!("End reconnect().");
         Ok(())
     }
 }
@@ -146,17 +163,45 @@ where
                 return e.map_err(|e| Error::Transient(MyError::NetworkError(e)));
             }
 
+            let mut read_backoff = ExponentialBackoff {
+                current_interval: self.read_retry_initial_delay(),
+                initial_interval: self.read_retry_initial_delay(),
+                max_interval: self.read_retry_max_delay(),
+                max_elapsed_time: Some(self.read_retry_timeout()),
+                ..Default::default()
+            };
+
             let mut resp_buf = [0u8; 64];
-            let read_size = self.read(&mut resp_buf).map_err(|e| {
+
+            let mut read_op = || {
+                self.read(&mut resp_buf).map_err(|e| {
+                    debug!("Failed to read response, chunk: {}, cause: {:?}.", chunk, e);
+                    if e.kind() == io::ErrorKind::WouldBlock {
+                        Error::Transient(MyError::NetworkError(e))
+                    } else {
+                        Error::Permanent(MyError::NetworkError(e))
+                    }
+                })
+            };
+
+            let read_size = read_op.retry(&mut read_backoff).map_err(|e| {
                 warn!("Failed to read response, chunk: {}, cause: {:?}.", chunk, e);
-                Error::Transient(MyError::NetworkError(e))
+                match e {
+                    Error::Permanent(e) => Error::Transient(e),
+                    err => err,
+                }
             })?;
 
+            // It seems that read() returns Ok(0) while Fluentd is reloading config.
+            // It will take a few seconds to restart them.
+            // And in this case even if retry writing, 0 is returned unless the connection reconnects.
             if read_size == 0 {
                 warn!("Received empty response, chunk: {}.", chunk);
                 if let Err(err) = self.reconnect() {
                     warn!("Failed to reconnect: {:?}.", err);
                 }
+
+                thread::sleep(Duration::from_secs(5));
                 Err(Error::Transient(MyError::NoAckResponseError))
             } else {
                 let reply =
@@ -168,9 +213,6 @@ where
                         "Did not match ack and chunk, ack: {}, chunk: {}.",
                         reply.ack, chunk
                     );
-                    if let Err(err) = self.reconnect() {
-                        warn!("Failed to reconnect: {:?}.", err);
-                    }
                     Err(Error::Transient(MyError::AckUmatchedError(
                         reply.ack,
                         chunk.to_string(),
@@ -236,8 +278,14 @@ where
     };
 
     op.retry(&mut backoff).map_err(|err| match err {
-        Error::Transient(e) => e,
-        Error::Permanent(e) => e,
+        Error::Transient(e) => {
+            warn!("Failed to connect: {:?}", e);
+            e
+        }
+        Error::Permanent(e) => {
+            warn!("Failed to connect: {:?}", e);
+            e
+        }
     })
 }
 
