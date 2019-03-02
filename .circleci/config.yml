@@ -10,7 +10,6 @@ steps_template: &steps_template
           - deps-cargo--
     - run: cargo fmt -- --color=always --check
     - run: cargo clippy --all -- -D warnings
-    - run: cargo clean
     - run: RUSTFLAGS="-C link-dead-code" cargo test --verbose --all --no-run
     - run: |
         if [ "${CIRCLE_JOB}" != "version" ]; then
