@@ -10,12 +10,15 @@ steps_template: &steps_template
           - deps-cargo--
     - run: cargo fmt -- --color=always --check
     - run: cargo clippy --all -- -D warnings
-    - run: cargo build --verbose --all
-    - run: cargo test --verbose --all
+    - run: cargo clean
+    - run: RUSTFLAGS="-C link-dead-code" cargo test --verbose --all --no-run
     - run: |
-        if [ "${CIRCLE_JOB}" != "version" ]; then exit 0; fi
-        cargo kcov -v --all
-        bash <(curl -s https://codecov.io/bash) -s ./target/cov
+        if [ "${CIRCLE_JOB}" != "version" ]; then
+          cargo test --verbose --all
+        else
+          cargo kcov --verbose --no-clean-rebuild --no-fail-fast --all
+          bash <(curl -s https://codecov.io/bash) -s ./target/cov
+        fi
     - save_cache:
         key: deps-cargo-{{ .Environment.CIRCLE_JOB }}-{{ checksum "Cargo.toml" }}
         paths:
