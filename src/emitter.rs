@@ -24,8 +24,6 @@ impl Emitter {
     }
 
     pub fn emit<RW: WriteRead>(&self, rw: &mut RW, size: Option<usize>) {
-        let mut buf = Vec::new();
-
         let mut queue = self.queue.borrow_mut();
         if queue.is_empty() {
             return;
@@ -33,22 +31,20 @@ impl Emitter {
         let q_size = queue.len();
         let size = size.unwrap_or_else(|| q_size);
         let size = if q_size < size { q_size } else { size };
-        trace!(
-            "Worker {} Consuming entries; size: {} / {}",
-            self.id,
-            size,
-            q_size
-        );
+
+        trace!("Worker {} consuming entries: {}/{}", self.id, size, q_size);
+
         let mut entries = Vec::with_capacity(size);
         queue.take(&mut entries);
 
+        let mut buf = Vec::new();
         let chunk = base64::encode(&Uuid::new_v4().to_string());
 
         let _ = buffer::pack_record(&mut buf, self.tag.as_str(), entries, chunk.as_str());
         if let Err(err) = rw.write_and_read(&buf, &chunk) {
             error!(
-                "Tag '{}' unexpected error occurred during emitting message: '{:?}'.",
-                self.tag, err
+                "Worker '{}' tag '{}' unexpected error occurred during emitting message: '{:?}'.",
+                self.id, self.tag, err
             );
         }
     }
@@ -94,6 +90,25 @@ mod test {
 
         {
             emitter.emit(&mut TestStream, Some(3));
+            let q = emitter.queue.borrow_mut();
+
+            assert_eq!(q.len(), 0);
+        }
+
+        emitter.push((SystemTime::now(), vec![0x00, 0x01]));
+        emitter.push((SystemTime::now(), vec![0x00, 0x02]));
+        emitter.push((SystemTime::now(), vec![0x00, 0x03]));
+        emitter.push((SystemTime::now(), vec![0x00, 0x04]));
+        emitter.push((SystemTime::now(), vec![0x00, 0x05]));
+
+        {
+            let q = emitter.queue.borrow_mut();
+
+            assert_eq!(q.len(), 5);
+        }
+
+        {
+            emitter.emit(&mut TestStream, None);
             let q = emitter.queue.borrow_mut();
 
             assert_eq!(q.len(), 0);
