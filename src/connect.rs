@@ -160,7 +160,7 @@ where
                     | io::ErrorKind::ConnectionAborted => self.reconnect(),
                     _ => Err(err),
                 };
-                return e.map_err(|e| Error::Transient(MyError::NetworkError(e)));
+                e.map_err(|e| Error::Transient(MyError::NetworkError(e)))?;
             }
 
             let mut read_backoff = ExponentialBackoff {
@@ -192,9 +192,9 @@ where
                 }
             })?;
 
-            // It seems that read() returns Ok(0) while Fluentd is reloading config.
-            // It will take a few seconds to restart them.
-            // And in this case even if retry writing, 0 is returned unless the connection reconnects.
+            // It seems that `read()` returns `Ok(0)` while Fluentd is reloading configuration, and
+            // it takes a few seconds to be restarted them. Also even if the same message retry
+            // writing, 0 is returned unless the connection is reconnected.
             if read_size == 0 {
                 warn!("Received empty response, chunk: {}.", chunk);
                 thread::sleep(Duration::from_secs(5));
@@ -292,17 +292,31 @@ where
 mod tests {
     use super::{io, Duration, ToSocketAddrs};
     use super::{Connect, ConnectionSettings, Reconnect, Stream, TcpConfig};
+    use std::collections::VecDeque;
+    use std::convert::From;
+    use std::io::{Read, Write};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[derive(Debug)]
+    pub struct TestStream(AtomicUsize);
+
+    impl TcpConfig for TestStream {
+        fn set_nodelay(&self, _v: bool) -> io::Result<()> {
+            Ok(())
+        }
+        fn set_read_timeout(&self, _v: Option<Duration>) -> io::Result<()> {
+            Ok(())
+        }
+        fn set_write_timeout(&self, _v: Option<Duration>) -> io::Result<()> {
+            Ok(())
+        }
+    }
 
     mod s {
         use super::*;
-        use std::convert::From;
-        use std::io::{Read, Write};
-        use std::sync::atomic::{AtomicUsize, Ordering};
 
         static CONN_COUNT: AtomicUsize = AtomicUsize::new(1);
 
-        #[derive(Debug)]
-        pub struct TestStream(AtomicUsize);
         impl Connect<TestStream> for TestStream {
             fn connect<A>(addr: A) -> io::Result<TestStream>
             where
@@ -318,17 +332,6 @@ mod tests {
                 } else {
                     Err(io::Error::from(io::ErrorKind::ConnectionRefused))
                 }
-            }
-        }
-        impl TcpConfig for TestStream {
-            fn set_nodelay(&self, _v: bool) -> io::Result<()> {
-                Ok(())
-            }
-            fn set_read_timeout(&self, _v: Option<Duration>) -> io::Result<()> {
-                Ok(())
-            }
-            fn set_write_timeout(&self, _v: Option<Duration>) -> io::Result<()> {
-                Ok(())
             }
         }
         impl Write for TestStream {
@@ -360,7 +363,7 @@ mod tests {
             connect_retry_timeout: Duration::from_millis(100),
             ..Default::default()
         };
-        Stream::<String, s::TestStream>::connect(addr, settings).unwrap();
+        Stream::<String, TestStream>::connect(addr, settings).unwrap();
     }
 
     #[test]
@@ -372,7 +375,7 @@ mod tests {
             connect_retry_timeout: Duration::from_millis(5),
             ..Default::default()
         };
-        let ret = Stream::<String, s::TestStream>::connect(addr, settings);
+        let ret = Stream::<String, TestStream>::connect(addr, settings);
         assert_eq!(ret.err().unwrap().kind(), io::ErrorKind::ConnectionRefused);
     }
 
@@ -385,7 +388,92 @@ mod tests {
             connect_retry_timeout: Duration::from_millis(100),
             ..Default::default()
         };
-        let mut ret = Stream::<String, s::TestStream>::connect(addr, settings).unwrap();
+        let mut ret = Stream::<String, TestStream>::connect(addr, settings).unwrap();
         ret.reconnect().unwrap();
     }
+
+    #[test]
+    fn read_and_write() {
+        use super::*;
+
+        #[derive(Debug)]
+        struct TS(RefCell<VecDeque<Result<usize, io::Error>>>);
+        impl TcpConfig for TS {
+            fn set_nodelay(&self, _v: bool) -> io::Result<()> {
+                Ok(())
+            }
+            fn set_read_timeout(&self, _v: Option<Duration>) -> io::Result<()> {
+                Ok(())
+            }
+            fn set_write_timeout(&self, _v: Option<Duration>) -> io::Result<()> {
+                Ok(())
+            }
+        }
+        impl Connect<TS> for TS {
+            fn connect<A>(_addr: A) -> io::Result<TS>
+            where
+                A: ToSocketAddrs + Clone,
+            {
+                let scenario = vec![
+                    Err(io::Error::from(io::ErrorKind::TimedOut)),
+                    Ok(100),
+                    Err(io::Error::from(io::ErrorKind::WouldBlock)),
+                    Ok(64),
+                ];
+                let mut q = VecDeque::new();
+                for s in scenario {
+                    q.push_back(s);
+                }
+                Ok(TS(RefCell::new(q)))
+            }
+        }
+        impl Write for TS {
+            fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+                let mut q = self.0.borrow_mut();
+                q.pop_front().unwrap()
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                let mut q = self.0.borrow_mut();
+                q.pop_front().unwrap().map(|_| ())
+            }
+        }
+        impl Read for TS {
+            fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+                let mut q = self.0.borrow_mut();
+                let a = q.pop_front().unwrap();
+                if a.is_ok() {
+                    let ack: [u8; 64] = [
+                        0x81, 0xa3, 0x61, 0x63, 0x6b, 0xd9, 0x30, 0x5a, 0x6d, 0x46, 0x6c, 0x4e,
+                        0x57, 0x5a, 0x6a, 0x4e, 0x6a, 0x45, 0x74, 0x59, 0x32, 0x55, 0x77, 0x5a,
+                        0x43, 0x30, 0x30, 0x4e, 0x47, 0x45, 0x35, 0x4c, 0x57, 0x49, 0x31, 0x5a,
+                        0x54, 0x4d, 0x74, 0x4d, 0x32, 0x59, 0x7a, 0x5a, 0x6a, 0x68, 0x69, 0x4e,
+                        0x54, 0x51, 0x33, 0x5a, 0x6d, 0x45, 0x77, 0x00, 0x00, 0x00, 0x00, 0x00,
+                        0x00, 0x00, 0x00, 0x00,
+                    ];
+                    for (i, b) in ack.iter().enumerate() {
+                        buf[i] = *b;
+                    }
+                    a
+                } else {
+                    a
+                }
+            }
+        }
+
+        let settings = ConnectionSettings {
+            write_retry_timeout: Duration::from_secs(30),
+            write_retry_max_delay: Duration::from_secs(1),
+            write_retry_initial_delay: Duration::from_millis(10),
+            read_retry_timeout: Duration::from_secs(30),
+            read_retry_max_delay: Duration::from_secs(1),
+            read_retry_initial_delay: Duration::from_millis(10),
+            ..Default::default()
+        };
+
+        let mut stream: Stream<String, TS> = Stream::connect("addr".to_string(), settings).unwrap();
+        stream
+            .write_and_read(&[0x01], "ZmFlNWZjNjEtY2UwZC00NGE5LWI1ZTMtM2YzZjhiNTQ3ZmEw")
+            .unwrap()
+    }
+
 }
