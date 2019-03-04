@@ -90,7 +90,7 @@ impl WorkerHandler {
         let mut emitters = self.emitters.borrow_mut();
         let emitter = emitters
             .entry(tag.clone())
-            .or_insert_with(|| Emitter::new(self.id, tag));
+            .or_insert_with(|| Emitter::new(tag));
         emitter.push((tm, msg));
     }
 
@@ -98,8 +98,11 @@ impl WorkerHandler {
     where
         RW: Reconnect + WriteRead,
     {
-        for emitter in self.emitters.borrow().values() {
-            emitter.emit(rw, size)
+        for (tag, emitter) in self.emitters.borrow().iter() {
+            if let Err(err) = emitter.emit(rw, size) {
+                error!("Worker '{}', tag '{}' unexpected error occurred during emitting message: '{:?}'.",
+                    self.id, tag, err);
+            }
         }
     }
 }

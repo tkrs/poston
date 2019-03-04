@@ -1,6 +1,6 @@
 use crate::buffer;
-use crate::error::Error as MyError;
-use backoff::{Error, ExponentialBackoff, Operation};
+use crate::error::Error;
+use backoff::{Error as RetryError, ExponentialBackoff, Operation};
 use std::cell::RefCell;
 use std::fmt::Debug;
 use std::io::{self, Read, Write};
@@ -34,7 +34,7 @@ pub trait ConnectRetryDelay {
 }
 
 pub trait WriteRead {
-    fn write_and_read(&mut self, buf: &[u8], chunk: &str) -> Result<(), Error<MyError>>;
+    fn write_and_read(&mut self, buf: &[u8], chunk: &str) -> Result<(), Error>;
 }
 
 #[derive(Debug)]
@@ -138,7 +138,7 @@ where
     A: ToSocketAddrs + Clone + Debug,
     S: Connect<S> + TcpConfig + Read + Write,
 {
-    fn write_and_read(&mut self, buf: &[u8], chunk: &str) -> Result<(), Error<MyError>> {
+    fn write_and_read(&mut self, buf: &[u8], chunk: &str) -> Result<(), Error> {
         let mut backoff = ExponentialBackoff {
             current_interval: self.write_retry_initial_delay(),
             initial_interval: self.write_retry_initial_delay(),
@@ -160,7 +160,7 @@ where
                     | io::ErrorKind::ConnectionAborted => self.reconnect(),
                     _ => Err(err),
                 };
-                e.map_err(|e| Error::Transient(MyError::NetworkError(e)))?;
+                e.map_err(|e| RetryError::Transient(Error::NetworkError(e)))?;
             }
 
             let mut read_backoff = ExponentialBackoff {
@@ -177,9 +177,9 @@ where
                 self.read(&mut resp_buf).map_err(|e| {
                     debug!("Failed to read response, chunk: {}, cause: {:?}.", chunk, e);
                     if e.kind() == io::ErrorKind::WouldBlock {
-                        Error::Transient(MyError::NetworkError(e))
+                        RetryError::Transient(Error::NetworkError(e))
                     } else {
-                        Error::Permanent(MyError::NetworkError(e))
+                        RetryError::Permanent(Error::NetworkError(e))
                     }
                 })
             };
@@ -187,7 +187,7 @@ where
             let read_size = read_op.retry(&mut read_backoff).map_err(|e| {
                 warn!("Failed to read response, chunk: {}, cause: {:?}.", chunk, e);
                 match e {
-                    Error::Permanent(e) => Error::Transient(e),
+                    RetryError::Permanent(e) => RetryError::Transient(e),
                     err => err,
                 }
             })?;
@@ -201,10 +201,10 @@ where
                 if let Err(err) = self.reconnect() {
                     warn!("Failed to reconnect: {:?}.", err);
                 }
-                Err(Error::Transient(MyError::NoAckResponseError))
+                Err(RetryError::Transient(Error::NoAckResponseError))
             } else {
                 let reply =
-                    buffer::unpack_response(&resp_buf, read_size).map_err(Error::Transient)?;
+                    buffer::unpack_response(&resp_buf, read_size).map_err(RetryError::Transient)?;
                 if reply.ack == chunk {
                     Ok(())
                 } else {
@@ -212,7 +212,7 @@ where
                         "Did not match ack and chunk, ack: {}, chunk: {}.",
                         reply.ack, chunk
                     );
-                    Err(Error::Transient(MyError::AckUmatchedError(
+                    Err(RetryError::Transient(Error::AckUmatchedError(
                         reply.ack,
                         chunk.to_string(),
                     )))
@@ -220,7 +220,9 @@ where
             }
         };
 
-        op.retry(&mut backoff)
+        op.retry(&mut backoff).map_err(|e| match e {
+            RetryError::Permanent(err) | RetryError::Transient(err) => err,
+        })
     }
 }
 
@@ -272,18 +274,14 @@ where
             })
             .map_err(|err| {
                 warn!("Failed to connect to {:?}.", addr);
-                Error::Transient(err)
+                RetryError::Transient(err)
             })
     };
 
-    op.retry(&mut backoff).map_err(|err| match err {
-        Error::Transient(e) => {
-            warn!("Failed to connect: {:?}", e);
-            e
-        }
-        Error::Permanent(e) => {
-            warn!("Failed to connect: {:?}", e);
-            e
+    op.retry(&mut backoff).map_err(|e| match e {
+        RetryError::Permanent(err) | RetryError::Transient(err) => {
+            error!("Failed to connect to server, cause: {:?}", err);
+            err
         }
     })
 }
