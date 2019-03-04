@@ -3,13 +3,13 @@ use crate::error::Error;
 use crate::rmps::encode::StructMapWriter;
 use crate::rmps::Serializer;
 use crate::worker::{Message, Worker};
+use crossbeam_channel::{unbounded, Sender};
 use serde::Serialize;
 use std::error::Error as StdError;
 use std::fmt::Debug;
 use std::io;
 use std::net::ToSocketAddrs;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
@@ -23,7 +23,7 @@ pub trait Client {
 
 pub struct WorkerPool {
     workers: Vec<Worker>,
-    sender: mpsc::Sender<Message>,
+    sender: Sender<Message>,
     closed: AtomicBool,
 }
 
@@ -44,7 +44,7 @@ impl WorkerPool {
 
         let mut workers = Vec::with_capacity(settings.workers);
 
-        let (sender, receiver) = mpsc::channel();
+        let (sender, receiver) = unbounded();
         let receiver = Arc::new(Mutex::new(receiver));
 
         for id in 0..settings.workers {

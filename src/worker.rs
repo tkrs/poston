@@ -1,11 +1,11 @@
 use crate::connect::*;
 use crate::emitter::Emitter;
+use crossbeam_channel::Receiver;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io;
 use std::net::{Shutdown, TcpStream, ToSocketAddrs};
-use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
@@ -20,7 +20,7 @@ impl Worker {
         id: usize,
         addr: A,
         conn_settings: ConnectionSettings,
-        receiver: Arc<Mutex<mpsc::Receiver<Message>>>,
+        receiver: Arc<Mutex<Receiver<Message>>>,
         flush_period: Duration,
         flush_size: usize,
     ) -> io::Result<Worker>
@@ -111,9 +111,9 @@ pub enum Message {
 
 #[cfg(test)]
 mod tests {
-    use self::super::*;
+    use super::*;
     use crate::connect::ConnectionSettings;
-    use std::sync::mpsc;
+    use crossbeam_channel::unbounded;
 
     #[test]
     fn worker_create_should_return_err_when_the_connection_open_is_failed() {
@@ -124,7 +124,7 @@ mod tests {
             connect_retry_timeout: Duration::from_millis(10),
             ..Default::default()
         };
-        let (_, receiver) = mpsc::channel();
+        let (_, receiver) = unbounded();
         let receiver = Arc::new(Mutex::new(receiver));
         let ret = Worker::create(
             1,
