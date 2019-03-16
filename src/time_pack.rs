@@ -42,8 +42,8 @@ mod test {
                 vec![0xd7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
             ),
             (
-                // Contains a 64-bit value representing the number of 100-nanosecond intervals since January 1, 1601 (UTC).
-                // See https://docs.microsoft.com/en-us/windows/desktop/api/minwinbase/ns-minwinbase-filetime
+                // On Windows, contains a 64-bit value representing the number of 100-nanosecond intervals since January 1, 1601 (UTC).
+                // https://docs.microsoft.com/en-us/windows/desktop/api/minwinbase/ns-minwinbase-filetime
                 UNIX_EPOCH.add(Duration::new(1_524_650_081, 1_234_500)),
                 vec![0xd7, 0x00, 0x5a, 0xe0, 0x50, 0x61, 0x00, 0x12, 0xd6, 0x44],
             ),
