@@ -26,7 +26,7 @@ version: 2
 jobs:
   version:
     docker:
-      - image: quay.io/tkrs/docker-rust:1.33.0
+      - image: quay.io/tkrs/docker-rust:1.34.0
     <<: *steps_template
   stable:
     docker:
