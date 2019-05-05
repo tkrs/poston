@@ -12,12 +12,12 @@ steps_template: &steps_template
     - run: cargo clippy --all -- -D warnings
     - run: RUSTFLAGS="-C link-dead-code" cargo test --verbose --all --no-run
     - run: |
-        if [ "${CIRCLE_JOB}" != "version" ]; then
+        # if [ "${CIRCLE_JOB}" != "version" ]; then
           cargo test --verbose --all
-        else
-          cargo kcov --verbose --no-clean-rebuild --no-fail-fast --all
-          bash <(curl -s https://codecov.io/bash) -s ./target/cov
-        fi
+        # else
+        #   cargo kcov --verbose --no-clean-rebuild --no-fail-fast --all
+        #   bash <(curl -s https://codecov.io/bash) -s ./target/cov
+        # fi
     - save_cache:
         key: deps-cargo-{{ .Environment.CIRCLE_JOB }}-{{ checksum "Cargo.toml" }}
         paths:
@@ -26,7 +26,7 @@ version: 2
 jobs:
   version:
     docker:
-      - image: quay.io/tkrs/docker-rust:1.34.0
+      - image: quay.io/tkrs/docker-rust:1.34.1
     <<: *steps_template
   stable:
     docker:
