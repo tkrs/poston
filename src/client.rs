@@ -30,15 +30,13 @@ pub struct WorkerPool {
 impl WorkerPool {
     pub fn create<A>(addr: &A) -> io::Result<WorkerPool>
     where
-        A: ToSocketAddrs + Clone + Debug,
-        A: Send + 'static,
+        A: ToSocketAddrs + Clone + Debug + Send + 'static,
     {
         WorkerPool::with_settings(addr, &Default::default())
     }
     pub fn with_settings<A>(addr: &A, settings: &Settings) -> io::Result<WorkerPool>
     where
-        A: ToSocketAddrs + Clone + Debug,
-        A: Send + 'static,
+        A: ToSocketAddrs + Clone + Debug + Send + 'static,
     {
         assert!(settings.workers > 0);
 

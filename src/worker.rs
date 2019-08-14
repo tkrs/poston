@@ -25,8 +25,7 @@ impl Worker {
         flush_size: usize,
     ) -> io::Result<Worker>
     where
-        A: ToSocketAddrs + Clone + Debug,
-        A: Send + 'static,
+        A: ToSocketAddrs + Clone + Debug + Send + 'static,
     {
         let mut stream: Stream<A, TcpStream> = Stream::connect(addr, conn_settings)?;
 

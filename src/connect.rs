@@ -473,5 +473,4 @@ mod tests {
             .write_and_read(&[0x01], "ZmFlNWZjNjEtY2UwZC00NGE5LWI1ZTMtM2YzZjhiNTQ3ZmEw")
             .unwrap()
     }
-
 }
