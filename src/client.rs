@@ -1,7 +1,6 @@
 use crate::connect;
 use crate::error::Error;
-use crate::rmps::encode::StructMapWriter;
-use crate::rmps::Serializer;
+use crate::rmps::encode as rencode;
 use crate::worker::{Message, Worker};
 use crossbeam_channel::{unbounded, Sender};
 use serde::Serialize;
@@ -104,8 +103,9 @@ impl Client for WorkerPool {
         }
 
         let mut buf = Vec::new();
-        a.serialize(&mut Serializer::with(&mut buf, StructMapWriter))
+        rencode::write_named(&mut buf, a)
             .map_err(|e| Error::DeriveError(e.description().to_string()))?;
+
         self.sender
             .send(Message::Queuing(tag, timestamp, buf))
             .map_err(|e| Error::SendError(e.description().to_string()))?;

@@ -1,9 +1,9 @@
 use crate::error::Error;
-use crate::rmps::encode::StructMapWriter;
-use crate::rmps::{Deserializer, Serializer};
+use crate::rmps::encode as rencode;
+use crate::rmps::Deserializer;
 use crate::time_pack::TimePack;
 use rmp::encode;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::collections::VecDeque;
 use std::error::Error as StdError;
 use std::time::SystemTime;
@@ -53,12 +53,11 @@ pub fn pack_record<'a>(
             buf.push(elem);
         }
     }
-    let options = Some(Options {
+    let options = Options {
         chunk: chunk.to_string(),
-    });
-    options
-        .serialize(&mut Serializer::with(buf, StructMapWriter))
-        .map_err(|e| Error::DeriveError(e.description().to_string()))
+    };
+
+    rencode::write_named(buf, &options).map_err(|e| Error::DeriveError(e.description().to_string()))
 }
 
 pub fn unpack_response(resp_buf: &[u8], size: usize) -> Result<AckReply, Error> {
