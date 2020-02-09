@@ -23,7 +23,6 @@ lazy_static! {
     static ref POOL: Mutex<WorkerPool> = {
         let addr = "127.0.0.1:24224".to_string();
         let settins = Settings {
-            workers: 1,
             flush_period: Duration::from_millis(10),
             max_flush_entries: 1000,
             connection_retry_timeout: Duration::from_secs(60),

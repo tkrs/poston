@@ -11,13 +11,11 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
 pub struct Worker {
-    pub id: usize,
-    pub handler: Option<thread::JoinHandle<()>>,
+    handler: Option<thread::JoinHandle<()>>,
 }
 
 impl Worker {
     pub fn create<A>(
-        id: usize,
         addr: A,
         conn_settings: ConnectionSettings,
         receiver: Arc<Mutex<Receiver<Message>>>,
@@ -30,9 +28,9 @@ impl Worker {
         let mut stream: Stream<A, TcpStream> = Stream::connect(addr, conn_settings)?;
 
         let emitters = RefCell::new(HashMap::new());
-        let wh = WorkerHandler { id, emitters };
+        let wh = WorkerHandler { emitters };
 
-        let builder = thread::Builder::new().name(format!("fluent-worker-pool-{}", id));
+        let builder = thread::Builder::new().name("fluent-worker-pool".to_owned());
         let handler = builder
             .spawn(move || {
                 let mut start = Instant::now();
@@ -41,32 +39,29 @@ impl Worker {
                     match receiver.recv_timeout(flush_period) {
                         Ok(msg) => match msg {
                             Message::Queuing(tag, tm, msg) => {
-                                trace!("Worker {} received a queuing message; tag: {}.", id, tag);
+                                trace!("Received a queuing message; tag: {}.", tag);
                                 wh.push(tag, tm, msg);
                                 if start.elapsed() >= flush_period {
-                                    trace!("Worker {} started flushing messages.", id);
+                                    trace!("Started flushing messages.");
                                     wh.flush(&mut stream, Some(flush_size));
                                     start = Instant::now();
-                                    trace!("Worker {} done flushing messages.", id);
+                                    trace!("Done flushing messages.");
                                 }
                             }
                             Message::Terminate => {
-                                info!("Worker {} received a terminate message.", id);
+                                info!("Received a terminate message.");
                                 wh.flush(&mut stream, None);
                                 match stream.stream.borrow_mut().shutdown(Shutdown::Both) {
                                     Ok(_) => (),
                                     Err(e) => {
-                                        error!(
-                                            "Worker {} occurred during terminating worker: {:?}.",
-                                            id, e
-                                        );
+                                        error!("Occurred during terminating worker: {:?}.", e);
                                     }
                                 }
                                 break;
                             }
                         },
                         Err(_) => {
-                            trace!("Worker {} start force flush messages.", id);
+                            trace!("Start force flush messages.");
                             wh.flush(&mut stream, Some(flush_size));
                             start = Instant::now();
                         }
@@ -75,12 +70,17 @@ impl Worker {
             })
             .ok();
 
-        Ok(Worker { id, handler })
+        Ok(Worker { handler })
+    }
+
+    pub fn join_handler(&mut self) {
+        if let Some(h) = self.handler.take() {
+            h.join().expect("Couldn't join on the associated thread");
+        }
     }
 }
 
 struct WorkerHandler {
-    id: usize,
     emitters: RefCell<HashMap<String, Emitter>>,
 }
 
@@ -99,8 +99,10 @@ impl WorkerHandler {
     {
         for (tag, emitter) in self.emitters.borrow().iter() {
             if let Err(err) = emitter.emit(rw, size) {
-                error!("Worker '{}', tag '{}' unexpected error occurred during emitting message: '{:?}'.",
-                    self.id, tag, err);
+                error!(
+                    "Tag '{}' unexpected error occurred during emitting message, cause: '{:?}'.",
+                    tag, err
+                );
             }
         }
     }
@@ -129,7 +131,6 @@ mod tests {
         let (_, receiver) = unbounded();
         let receiver = Arc::new(Mutex::new(receiver));
         let ret = Worker::create(
-            1,
             addr.clone(),
             settings,
             Arc::clone(&receiver),

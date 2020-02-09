@@ -1,7 +1,6 @@
 use crate::buffer::{self, Take};
 use crate::connect::*;
 use crate::error::Error;
-use base64;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::time::SystemTime;
