@@ -4,7 +4,6 @@ use crate::rmps::encode as rencode;
 use crate::worker::{Message, Worker};
 use crossbeam_channel::{unbounded, Sender};
 use serde::Serialize;
-use std::error::Error as StdError;
 use std::fmt::Debug;
 use std::io;
 use std::net::ToSocketAddrs;
@@ -82,12 +81,11 @@ impl Client for WorkerPool {
         }
 
         let mut buf = Vec::new();
-        rencode::write_named(&mut buf, a)
-            .map_err(|e| Error::DeriveError(e.description().to_string()))?;
+        rencode::write_named(&mut buf, a).map_err(|e| Error::DeriveError(e.to_string()))?;
 
         self.sender
             .send(Message::Queuing(tag, timestamp, buf))
-            .map_err(|e| Error::SendError(e.description().to_string()))?;
+            .map_err(|e| Error::SendError(e.to_string()))?;
         Ok(())
     }
 

@@ -1,10 +1,9 @@
 use std::error::Error as StdError;
 use std::fmt;
-use std::io;
 
 #[derive(Debug)]
 pub enum Error {
-    NetworkError(io::Error),
+    NetworkError(String),
     DeriveError(String),
     SendError(String),
     AckUmatchedError(String, String),
@@ -16,7 +15,7 @@ pub enum Error {
 impl StdError for Error {
     fn description(&self) -> &str {
         match *self {
-            Error::NetworkError(ref e) => e.description(),
+            Error::NetworkError(ref e) => e,
             Error::DeriveError(ref e) => e,
             Error::SendError(ref e) => e,
             Error::AckUmatchedError(_, _) => "request chunk and response ack-id did not match",

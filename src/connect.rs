@@ -160,7 +160,7 @@ where
                     | io::ErrorKind::ConnectionAborted => self.reconnect(),
                     _ => Err(err),
                 };
-                e.map_err(|e| RetryError::Transient(Error::NetworkError(e)))?;
+                e.map_err(|e| RetryError::Transient(Error::NetworkError(e.to_string())))?;
             }
 
             let mut read_backoff = ExponentialBackoff {
@@ -177,9 +177,9 @@ where
                 self.read(&mut resp_buf).map_err(|e| {
                     debug!("Failed to read response, chunk: {}, cause: {:?}.", chunk, e);
                     if e.kind() == io::ErrorKind::WouldBlock {
-                        RetryError::Transient(Error::NetworkError(e))
+                        RetryError::Transient(Error::NetworkError(e.to_string()))
                     } else {
-                        RetryError::Permanent(Error::NetworkError(e))
+                        RetryError::Permanent(Error::NetworkError(e.to_string()))
                     }
                 })
             };
