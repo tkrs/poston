@@ -18,7 +18,7 @@ maintenance = { status = "experimental" }
 
 [dependencies]
 backoff = "0.1"
-base64 = "0.11"
+base64 = "0.12"
 crossbeam-channel = "0.4"
 log = "0.4"
 rmp = "0.8"
@@ -28,7 +28,7 @@ serde_derive = "1.0"
 uuid = { version = "0.8", features = ["v4"] }
 
 [dev-dependencies]
-pretty_env_logger = "0.3"
+pretty_env_logger = "0.4"
 lazy_static = "1.4"
 rand = "0.7"
 
