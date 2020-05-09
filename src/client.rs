@@ -2,7 +2,7 @@ use crate::connect;
 use crate::error::Error;
 use crate::rmps::encode as rencode;
 use crate::worker::{Message, Worker};
-use crossbeam_channel::{unbounded, Sender};
+use crossbeam_channel::{bounded, unbounded, Sender};
 use serde::Serialize;
 use std::fmt::Debug;
 use std::io;
@@ -14,14 +14,13 @@ pub trait Client {
     fn send<A>(&self, tag: String, a: &A, timestamp: SystemTime) -> Result<(), Error>
     where
         A: Serialize;
-    fn send_flush(&self) -> Result<(), Error>;
-    fn close(&mut self);
+    fn terminate(&self) -> Result<(), Error>;
 }
 
 pub struct WorkerPool {
     worker: Worker,
     sender: Sender<Message>,
-    closed: AtomicBool,
+    terminated: AtomicBool,
 }
 
 impl WorkerPool {
@@ -63,7 +62,7 @@ impl WorkerPool {
         Ok(WorkerPool {
             worker,
             sender,
-            closed: AtomicBool::new(false),
+            terminated: AtomicBool::new(false),
         })
     }
 }
@@ -73,7 +72,7 @@ impl Client for WorkerPool {
     where
         A: Serialize,
     {
-        if self.closed.load(Ordering::Acquire) {
+        if self.terminated.load(Ordering::Acquire) {
             debug!("Worker does already closed.");
             return Ok(());
         }
@@ -87,33 +86,32 @@ impl Client for WorkerPool {
         Ok(())
     }
 
-    fn send_flush(&self) -> Result<(), Error> {
-        self.sender
-            .send(Message::Flushing)
-            .map_err(|e| Error::SendError(e.to_string()))?;
-        Ok(())
-    }
-
-    fn close(&mut self) {
-        if self.closed.fetch_or(true, Ordering::SeqCst) {
-            info!("Worker does already closed.");
-            return;
+    fn terminate(&self) -> Result<(), Error> {
+        if self.terminated.fetch_or(true, Ordering::SeqCst) {
+            info!("Worker does already terminated.");
+            return Ok(());
         }
 
         info!("Sending terminate message to worker.");
 
-        self.sender.send(Message::Terminate).unwrap();
+        let (sender, receiver) = bounded::<()>(0);
+        self.sender.send(Message::Terminating(sender)).unwrap();
+        receiver
+            .recv()
+            .map_err(|e| Error::TerminateError(e.to_string()))?;
 
-        info!("Shutting down worker.");
-
-        let wkr = &mut self.worker;
-        wkr.join_handler();
+        Ok(())
     }
 }
 
 impl Drop for WorkerPool {
     fn drop(&mut self) {
-        self.close()
+        self.terminate().unwrap();
+        let wkr = &mut self.worker;
+
+        info!("Shutting down worker.");
+
+        wkr.join_handler();
     }
 }
 

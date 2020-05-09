@@ -9,7 +9,6 @@ use poston::{Client, Settings, WorkerPool};
 use pretty_env_logger;
 use rand::prelude::*;
 use rand::{self, distributions::Alphanumeric};
-use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
@@ -20,7 +19,7 @@ struct Human {
 }
 
 lazy_static! {
-    static ref POOL: Mutex<WorkerPool> = {
+    static ref POOL: WorkerPool = {
         let addr = "127.0.0.1:24224".to_string();
         let settins = Settings {
             flush_period: Duration::from_millis(10),
@@ -30,9 +29,7 @@ lazy_static! {
             read_timeout: Duration::from_secs(30),
             ..Default::default()
         };
-        let pool =
-            WorkerPool::with_settings(&addr, &settins).expect("Couldn't create the worker pool.");
-        Mutex::new(pool)
+        WorkerPool::with_settings(&addr, &settins).expect("Couldn't create the worker pool.")
     };
 }
 
@@ -57,8 +54,7 @@ fn main() {
                 let a = Human { age, name };
                 let timestamp = SystemTime::now();
 
-                let pool = POOL.lock().expect("Client couldn't be locked.");
-                pool.send(tag, &a, timestamp).unwrap();
+                POOL.send(tag, &a, timestamp).unwrap();
 
                 let dur = rng.gen_range(10, 500000);
                 thread::sleep(Duration::new(0, dur));
@@ -73,8 +69,7 @@ fn main() {
 
     info!("End sending messages.");
 
-    let mut pool = POOL.lock().expect("Client couldn't be locked.");
-    pool.close();
+    POOL.terminate().unwrap();
 
     info!("End. elapsed: {:?}", start.elapsed());
 }

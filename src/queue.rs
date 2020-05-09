@@ -6,6 +6,7 @@ use std::time::SystemTime;
 pub trait Queue {
     fn push(&mut self, tag: String, tm: SystemTime, msg: Vec<u8>);
     fn flush(&mut self, size: Option<usize>);
+    fn len(&self) -> usize;
 }
 
 pub struct QueueHandler<S: WriteRead> {
@@ -31,6 +32,10 @@ impl<S: WriteRead> Queue for QueueHandler<S> {
                 );
             }
         }
+    }
+
+    fn len(&self) -> usize {
+        self.emitters.values().map(|e| e.len()).sum()
     }
 }
 
