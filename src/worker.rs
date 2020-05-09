@@ -1,6 +1,6 @@
 use crate::connect::*;
 use crate::queue::*;
-use crossbeam_channel::Receiver;
+use crossbeam_channel::{Receiver, Sender};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io;
@@ -48,8 +48,7 @@ impl Worker {
 
 pub enum Message {
     Queuing(String, SystemTime, Vec<u8>),
-    Flushing,
-    Terminate,
+    Terminating(Sender<()>),
 }
 
 fn start_worker<S: WriteRead>(
@@ -106,14 +105,11 @@ fn handle_message(
                 HandleResult::Queued
             }
         }
-        Message::Flushing => {
-            info!("Received a flushing message");
+        Message::Terminating(sender) => {
+            info!("Received a terminating message");
             queue.flush(None);
-            HandleResult::Flushed
-        }
-        Message::Terminate => {
-            info!("Received a terminate message");
-            queue.flush(None);
+            info!("Flushed, queue remaining: {}", queue.len());
+            sender.send(()).unwrap();
             HandleResult::Terminated
         }
     }
@@ -123,7 +119,7 @@ fn handle_message(
 mod tests {
     use super::*;
     use crate::connect::ConnectionSettings;
-    use crossbeam_channel::unbounded;
+    use crossbeam_channel::{bounded, unbounded};
 
     #[test]
     fn worker_create_should_return_err_when_the_connection_open_is_failed() {
@@ -149,6 +145,9 @@ mod tests {
     impl Queue for Q {
         fn push(&mut self, _tag: String, _tm: SystemTime, _msg: Vec<u8>) {}
         fn flush(&mut self, _size: Option<usize>) {}
+        fn len(&self) -> usize {
+            0
+        }
     }
 
     #[test]
@@ -180,23 +179,14 @@ mod tests {
             ),
             HandleResult::Flushed
         );
-        assert_eq!(
-            handle_message(
-                Message::Flushing,
-                &mut (now - flush_period),
-                flush_period,
-                1,
-                &mut Q
-            ),
-            HandleResult::Flushed
-        );
     }
 
     #[test]
     fn test_handle_message_terminated() {
+        let (sender, receiver) = bounded::<()>(1);
         assert_eq!(
             handle_message(
-                Message::Terminate,
+                Message::Terminating(sender),
                 &mut Instant::now(),
                 Duration::from_nanos(1),
                 1,
@@ -204,6 +194,7 @@ mod tests {
             ),
             HandleResult::Terminated
         );
+        receiver.recv_timeout(Duration::from_millis(100)).unwrap();
     }
 
     struct WR;
@@ -216,7 +207,11 @@ mod tests {
     #[test]
     fn test_start_worker_terminate() {
         let (sender, receiver) = unbounded();
+        let (sender2, receiver2) = bounded::<()>(1);
+
         thread::spawn(move || start_worker(WR, receiver, Duration::from_nanos(1), 1));
-        sender.send(Message::Terminate).unwrap();
+        sender.send(Message::Terminating(sender2)).unwrap();
+
+        receiver2.recv_timeout(Duration::from_millis(100)).unwrap();
     }
 }

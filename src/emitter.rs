@@ -17,6 +17,10 @@ impl Emitter {
         Emitter { tag, queue }
     }
 
+    pub fn len(&self) -> usize {
+        self.queue.borrow().len()
+    }
+
     pub fn push(&self, elem: (SystemTime, Vec<u8>)) {
         let mut q = self.queue.borrow_mut();
         q.push_back(elem)
