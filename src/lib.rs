@@ -11,6 +11,7 @@ mod buffer;
 mod connect;
 mod emitter;
 mod error;
+mod queue;
 mod time_pack;
 mod worker;
 
