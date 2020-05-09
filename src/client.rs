@@ -14,7 +14,7 @@ pub trait Client {
     fn send<A>(&self, tag: String, a: &A, timestamp: SystemTime) -> Result<(), Error>
     where
         A: Serialize;
-
+    fn send_flush(&self) -> Result<(), Error>;
     fn close(&mut self);
 }
 
@@ -83,6 +83,13 @@ impl Client for WorkerPool {
 
         self.sender
             .send(Message::Queuing(tag, timestamp, buf))
+            .map_err(|e| Error::SendError(e.to_string()))?;
+        Ok(())
+    }
+
+    fn send_flush(&self) -> Result<(), Error> {
+        self.sender
+            .send(Message::Flushing)
             .map_err(|e| Error::SendError(e.to_string()))?;
         Ok(())
     }
