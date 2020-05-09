@@ -8,7 +8,6 @@ use std::fmt::Debug;
 use std::io;
 use std::net::ToSocketAddrs;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
 pub trait Client {
@@ -37,7 +36,6 @@ impl WorkerPool {
         A: ToSocketAddrs + Clone + Debug + Send + 'static,
     {
         let (sender, receiver) = unbounded();
-        let receiver = Arc::new(Mutex::new(receiver));
 
         info!("Worker creating...");
 
