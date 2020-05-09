@@ -24,13 +24,13 @@ pub struct WorkerPool {
 }
 
 impl WorkerPool {
-    pub fn create<A>(addr: &A) -> io::Result<WorkerPool>
+    pub fn create<A>(addr: &A) -> io::Result<Self>
     where
         A: ToSocketAddrs + Clone + Debug + Send + 'static,
     {
-        WorkerPool::with_settings(addr, &Default::default())
+        Self::with_settings(addr, &Default::default())
     }
-    pub fn with_settings<A>(addr: &A, settings: &Settings) -> io::Result<WorkerPool>
+    pub fn with_settings<A>(addr: &A, settings: &Settings) -> io::Result<Self>
     where
         A: ToSocketAddrs + Clone + Debug + Send + 'static,
     {
@@ -59,7 +59,7 @@ impl WorkerPool {
             settings.max_flush_entries,
         )?;
 
-        Ok(WorkerPool {
+        Ok(Self {
             worker,
             sender,
             terminated: AtomicBool::new(false),

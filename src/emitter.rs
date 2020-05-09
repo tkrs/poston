@@ -14,7 +14,7 @@ pub struct Emitter {
 impl Emitter {
     pub fn new(tag: String) -> Self {
         let queue = RefCell::new(VecDeque::new());
-        Emitter { tag, queue }
+        Self { tag, queue }
     }
 
     pub fn len(&self) -> usize {

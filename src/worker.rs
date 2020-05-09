@@ -19,7 +19,7 @@ impl Worker {
         receiver: Receiver<Message>,
         flush_period: Duration,
         flush_size: usize,
-    ) -> io::Result<Worker>
+    ) -> io::Result<Self>
     where
         A: ToSocketAddrs + Clone + Debug + Send + 'static,
     {
@@ -34,7 +34,7 @@ impl Worker {
                 .unwrap_or_else(|e| panic!("Failed to shutdown the stream: {:?}", e));
         })?;
 
-        Ok(Worker {
+        Ok(Self {
             handler: Some(handler),
         })
     }

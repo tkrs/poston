@@ -69,7 +69,7 @@ where
     pub fn connect(addr: A, settings: ConnectionSettings) -> io::Result<Stream<A, S>> {
         let stream = connect_with_retry(addr.clone(), settings)?;
         let stream = RefCell::new(stream);
-        Ok(Stream {
+        Ok(Self {
             addr,
             stream,
             settings,
