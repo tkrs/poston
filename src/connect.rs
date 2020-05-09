@@ -103,10 +103,10 @@ where
     S: Connect<S> + TcpConfig,
 {
     fn reconnect(&mut self) -> io::Result<()> {
-        debug!("Start reconnect().");
+        debug!("Start reconnect()");
         let stream = connect_with_retry(self.addr.clone(), self.settings)?;
         *self.stream.borrow_mut() = stream;
-        debug!("End reconnect().");
+        debug!("End reconnect()");
         Ok(())
     }
 }
@@ -133,7 +133,7 @@ where
     }
 }
 
-impl<A, S> WriteRead for Stream<A, S>
+impl<A, S> WriteRead for &mut Stream<A, S>
 where
     A: ToSocketAddrs + Clone + Debug,
     S: Connect<S> + TcpConfig + Read + Write,
@@ -150,7 +150,7 @@ where
         let mut op = || {
             if let Err(err) = self.write(buf) {
                 warn!(
-                    "Failed to write message, chunk: {}. cause: {:?}.",
+                    "Failed to write message, chunk: {}. cause: {:?}",
                     chunk, err
                 );
                 let e = match err.kind() {
@@ -175,7 +175,7 @@ where
 
             let mut read_op = || {
                 self.read(&mut resp_buf).map_err(|e| {
-                    debug!("Failed to read response, chunk: {}, cause: {:?}.", chunk, e);
+                    debug!("Failed to read response, chunk: {}, cause: {:?}", chunk, e);
                     if e.kind() == io::ErrorKind::WouldBlock {
                         RetryError::Transient(Error::NetworkError(e.to_string()))
                     } else {
@@ -185,7 +185,7 @@ where
             };
 
             let read_size = read_op.retry(&mut read_backoff).map_err(|e| {
-                warn!("Failed to read response, chunk: {}, cause: {:?}.", chunk, e);
+                warn!("Failed to read response, chunk: {}, cause: {:?}", chunk, e);
                 match e {
                     RetryError::Permanent(e) => RetryError::Transient(e),
                     err => err,
@@ -196,10 +196,10 @@ where
             // it takes a few seconds to be restarted them. Also even if the same message retry
             // writing, 0 is returned unless the connection is reconnected.
             if read_size == 0 {
-                warn!("Received empty response, chunk: {}.", chunk);
+                warn!("Received empty response, chunk: {}", chunk);
                 thread::sleep(Duration::from_secs(5));
                 if let Err(err) = self.reconnect() {
-                    warn!("Failed to reconnect: {:?}.", err);
+                    warn!("Failed to reconnect: {:?}", err);
                 }
                 Err(RetryError::Transient(Error::NoAckResponseError))
             } else {
@@ -209,7 +209,7 @@ where
                     Ok(())
                 } else {
                     warn!(
-                        "Did not match ack and chunk, ack: {}, chunk: {}.",
+                        "Did not match ack and chunk, ack: {}, chunk: {}",
                         reply.ack, chunk
                     );
                     Err(RetryError::Transient(Error::AckUmatchedError(
@@ -264,7 +264,7 @@ where
 
     let mut op = || {
         let addr = addr.clone();
-        debug!("Start connect to {:?}.", addr);
+        debug!("Start connect to {:?}", addr);
         C::connect(&addr)
             .map(|s| {
                 s.set_nodelay(true).unwrap();
@@ -273,7 +273,7 @@ where
                 s
             })
             .map_err(|err| {
-                warn!("Failed to connect to {:?}.", addr);
+                warn!("Failed to connect to {:?}", addr);
                 RetryError::Transient(err)
             })
     };
@@ -469,7 +469,7 @@ mod tests {
         };
 
         let mut stream: Stream<String, TS> = Stream::connect("addr".to_string(), settings).unwrap();
-        stream
+        (&mut stream)
             .write_and_read(&[0x01], "ZmFlNWZjNjEtY2UwZC00NGE5LWI1ZTMtM2YzZjhiNTQ3ZmEw")
             .unwrap()
     }

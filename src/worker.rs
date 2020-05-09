@@ -1,7 +1,6 @@
 use crate::connect::*;
-use crate::emitter::Emitter;
+use crate::queue::*;
 use crossbeam_channel::Receiver;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io;
@@ -25,50 +24,19 @@ impl Worker {
         A: ToSocketAddrs + Clone + Debug + Send + 'static,
     {
         let mut stream: Stream<A, TcpStream> = Stream::connect(addr, conn_settings)?;
+        let thread_builder = thread::Builder::new().name("fluent-worker-pool".to_owned());
+        let handler = thread_builder.spawn(move || {
+            start_worker(&mut stream, receiver, flush_period, flush_size);
+            stream
+                .stream
+                .borrow_mut()
+                .shutdown(Shutdown::Both)
+                .unwrap_or_else(|e| panic!("Failed to shutdown the stream: {:?}", e));
+        })?;
 
-        let emitters = RefCell::new(HashMap::new());
-        let wh = WorkerHandler { emitters };
-
-        let builder = thread::Builder::new().name("fluent-worker-pool".to_owned());
-        let handler = builder
-            .spawn(move || {
-                let mut start = Instant::now();
-                loop {
-                    match receiver.recv_timeout(flush_period) {
-                        Ok(msg) => match msg {
-                            Message::Queuing(tag, tm, msg) => {
-                                trace!("Received a queuing message; tag: {}.", tag);
-                                wh.push(tag, tm, msg);
-                                if start.elapsed() >= flush_period {
-                                    trace!("Started flushing messages.");
-                                    wh.flush(&mut stream, Some(flush_size));
-                                    start = Instant::now();
-                                    trace!("Done flushing messages.");
-                                }
-                            }
-                            Message::Terminate => {
-                                info!("Received a terminate message.");
-                                wh.flush(&mut stream, None);
-                                match stream.stream.borrow_mut().shutdown(Shutdown::Both) {
-                                    Ok(_) => (),
-                                    Err(e) => {
-                                        error!("Occurred during terminating worker: {:?}.", e);
-                                    }
-                                }
-                                break;
-                            }
-                        },
-                        Err(_) => {
-                            trace!("Start force flush messages.");
-                            wh.flush(&mut stream, Some(flush_size));
-                            start = Instant::now();
-                        }
-                    };
-                }
-            })
-            .ok();
-
-        Ok(Worker { handler })
+        Ok(Worker {
+            handler: Some(handler),
+        })
     }
 
     pub fn join_handler(&mut self) {
@@ -78,37 +46,71 @@ impl Worker {
     }
 }
 
-struct WorkerHandler {
-    emitters: RefCell<HashMap<String, Emitter>>,
-}
-
-impl WorkerHandler {
-    fn push(&self, tag: String, tm: SystemTime, msg: Vec<u8>) {
-        let mut emitters = self.emitters.borrow_mut();
-        let emitter = emitters
-            .entry(tag.clone())
-            .or_insert_with(|| Emitter::new(tag));
-        emitter.push((tm, msg));
-    }
-
-    fn flush<RW>(&self, rw: &mut RW, size: Option<usize>)
-    where
-        RW: Reconnect + WriteRead,
-    {
-        for (tag, emitter) in self.emitters.borrow().iter() {
-            if let Err(err) = emitter.emit(rw, size) {
-                error!(
-                    "Tag '{}' unexpected error occurred during emitting message, cause: '{:?}'.",
-                    tag, err
-                );
-            }
-        }
-    }
-}
-
 pub enum Message {
     Queuing(String, SystemTime, Vec<u8>),
     Terminate,
+}
+
+fn start_worker<S: WriteRead>(
+    stream: S,
+    receiver: Receiver<Message>,
+    flush_period: Duration,
+    flush_size: usize,
+) {
+    let emitters = HashMap::new();
+    let mut queue = QueueHandler {
+        emitters,
+        flusher: stream,
+    };
+    let mut now = Instant::now();
+
+    loop {
+        match receiver.recv_timeout(flush_period) {
+            Ok(msg) => match handle_message(msg, &now, flush_period, flush_size, &mut queue) {
+                HandleResult::Queued => (),
+                HandleResult::Flushed => now = Instant::now(),
+                HandleResult::Terminated => break,
+            },
+            Err(_) => {
+                trace!("Start force flush messages");
+                queue.flush(Some(flush_size));
+                now = Instant::now();
+            }
+        };
+    }
+}
+
+fn handle_message(
+    msg: Message,
+    now: &Instant,
+    flush_period: Duration,
+    flush_size: usize,
+    queue: &mut dyn Queue,
+) -> HandleResult {
+    match msg {
+        Message::Queuing(tag, tm, msg) => {
+            trace!(
+                "Received a queuing message, tag: {}, time: {:?}, size: {}",
+                tag,
+                tm,
+                msg.len()
+            );
+            queue.push(tag, tm, msg);
+            if now.elapsed() >= flush_period {
+                trace!("Start flushing messages");
+                queue.flush(Some(flush_size));
+                trace!("Flushed messages");
+                HandleResult::Flushed
+            } else {
+                HandleResult::Queued
+            }
+        }
+        Message::Terminate => {
+            info!("Received a terminate message");
+            queue.flush(None);
+            HandleResult::Terminated
+        }
+    }
 }
 
 #[cfg(test)]
@@ -135,5 +137,70 @@ mod tests {
             1,
         );
         assert!(ret.is_err())
+    }
+
+    struct Q;
+    impl Queue for Q {
+        fn push(&mut self, _tag: String, _tm: SystemTime, _msg: Vec<u8>) {}
+        fn flush(&mut self, _size: Option<usize>) {}
+    }
+
+    #[test]
+    fn test_handle_message_queued() {
+        let msg = Message::Queuing("tag".into(), SystemTime::now(), vec![1, 2, 4]);
+        let mut now = Instant::now();
+        let flush_period = Duration::from_secs(100);
+        let flush_size = 2;
+        let mut queue = Q;
+
+        assert_eq!(
+            handle_message(msg, &mut now, flush_period, flush_size, &mut queue),
+            HandleResult::Queued
+        );
+    }
+
+    #[test]
+    fn test_handle_message_flushed() {
+        let now = Instant::now();
+        let flush_period = Duration::from_nanos(1);
+
+        assert_eq!(
+            handle_message(
+                Message::Queuing("tag".into(), SystemTime::now(), vec![1, 2, 4]),
+                &mut (now - flush_period),
+                flush_period,
+                1,
+                &mut Q
+            ),
+            HandleResult::Flushed
+        );
+    }
+
+    #[test]
+    fn test_handle_message_terminated() {
+        assert_eq!(
+            handle_message(
+                Message::Terminate,
+                &mut Instant::now(),
+                Duration::from_nanos(1),
+                1,
+                &mut Q
+            ),
+            HandleResult::Terminated
+        );
+    }
+
+    struct WR;
+    impl WriteRead for WR {
+        fn write_and_read(&mut self, _buf: &[u8], _chunk: &str) -> Result<(), crate::error::Error> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_start_worker_terminate() {
+        let (sender, receiver) = unbounded();
+        thread::spawn(move || start_worker(WR, receiver, Duration::from_nanos(1), 1));
+        sender.send(Message::Terminate).unwrap();
     }
 }
