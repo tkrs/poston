@@ -48,6 +48,7 @@ impl Worker {
 
 pub enum Message {
     Queuing(String, SystemTime, Vec<u8>),
+    Flushing,
     Terminate,
 }
 
@@ -104,6 +105,11 @@ fn handle_message(
             } else {
                 HandleResult::Queued
             }
+        }
+        Message::Flushing => {
+            info!("Received a flushing message");
+            queue.flush(None);
+            HandleResult::Flushed
         }
         Message::Terminate => {
             info!("Received a terminate message");
@@ -167,6 +173,16 @@ mod tests {
         assert_eq!(
             handle_message(
                 Message::Queuing("tag".into(), SystemTime::now(), vec![1, 2, 4]),
+                &mut (now - flush_period),
+                flush_period,
+                1,
+                &mut Q
+            ),
+            HandleResult::Flushed
+        );
+        assert_eq!(
+            handle_message(
+                Message::Flushing,
                 &mut (now - flush_period),
                 flush_period,
                 1,
