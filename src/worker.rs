@@ -6,7 +6,6 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io;
 use std::net::{Shutdown, TcpStream, ToSocketAddrs};
-use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
@@ -18,7 +17,7 @@ impl Worker {
     pub fn create<A>(
         addr: A,
         conn_settings: ConnectionSettings,
-        receiver: Arc<Mutex<Receiver<Message>>>,
+        receiver: Receiver<Message>,
         flush_period: Duration,
         flush_size: usize,
     ) -> io::Result<Worker>
@@ -35,7 +34,6 @@ impl Worker {
             .spawn(move || {
                 let mut start = Instant::now();
                 loop {
-                    let receiver = receiver.lock().expect("Couldn't be locked.");
                     match receiver.recv_timeout(flush_period) {
                         Ok(msg) => match msg {
                             Message::Queuing(tag, tm, msg) => {
@@ -129,11 +127,10 @@ mod tests {
             ..Default::default()
         };
         let (_, receiver) = unbounded();
-        let receiver = Arc::new(Mutex::new(receiver));
         let ret = Worker::create(
             addr.clone(),
             settings,
-            Arc::clone(&receiver),
+            receiver,
             Duration::from_millis(1),
             1,
         );
