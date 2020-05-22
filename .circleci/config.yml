@@ -1,74 +1,56 @@
-steps_template: &steps_template
-  steps:
-    - checkout
-    - run: rustup show
-    - restore_cache:
-        keys:
-          - deps-cargo-{{ .Environment.CIRCLE_JOB }}-{{ checksum "Cargo.toml" }}
-          - deps-cargo-{{ .Environment.CIRCLE_JOB }}-
-          - deps-cargo--{{ checksum "Cargo.toml" }}
-          - deps-cargo--
-    - run: cargo fmt -- --color=always --check
-    - run: cargo clippy --all -- -D warnings
-    - run: cargo test --verbose --all
-    - save_cache:
-        key: deps-cargo-{{ .Environment.CIRCLE_JOB }}-{{ checksum "Cargo.toml" }}
-        paths:
-          - ~/.cargo
-version: 2
+version: 2.1
+
+commands:
+  build:
+    steps:
+      - checkout
+      - run: rustup show
+      - run: rustup component add rustfmt clippy
+      - restore_cache:
+          keys:
+            - deps-v1-cargo-{{ checksum "Cargo.toml" }}-{{ .Environment.CIRCLE_JOB }}
+            - deps-v1-cargo-{{ checksum "Cargo.toml" }}
+      - run: cargo fmt -- --color=always --check
+      - run: cargo clippy --workspace -- -D warnings
+      - run: cargo test --verbose --workspace
+      - run: cargo build --verbose --workspace
+      - save_cache:
+          key: deps-v1-cargo-{{ checksum "Cargo.toml" }}-{{ .Environment.CIRCLE_JOB }}
+          paths:
+            - /usr/loca/cargo
+
 jobs:
   stable:
     docker:
-      - image: quay.io/tkrs/docker-rust:stable
+      - image: circleci/rust
         environment:
           RUSTUP_TOOLCHAIN: stable
-    <<: *steps_template
+    steps:
+      - build
   beta:
     docker:
-      - image: quay.io/tkrs/docker-rust:beta
+      - image: circleci/rust
         environment:
           RUSTUP_TOOLCHAIN: beta
-    <<: *steps_template
+    steps:
+      - build
   nightly:
     docker:
-      - image: quay.io/tkrs/docker-rust:nightly
+      - image: circleci/rust
         environment:
           RUSTUP_TOOLCHAIN: nightly
-    <<: *steps_template
+    steps:
+      - build
+
 workflows:
   version: 2
-  build:
+  stable-build:
     jobs:
       - stable
-      - beta
-      - nightly
-  stable_schedule:
-    triggers:
-      - schedule:
-          cron: "0 6 * * *"
-          filters:
-            branches:
-              only:
-                - master
-    jobs:
-      - stable
-  beta_schedule:
-    triggers:
-      - schedule:
-          cron: "0 8 * * *"
-          filters:
-            branches:
-              only:
-                - master
+  beta-build:
     jobs:
       - beta
-  nightly_schedule:
-    triggers:
-      - schedule:
-          cron: "0 10 * * *"
-          filters:
-            branches:
-              only:
-                - master
+
+  nightly-build:
     jobs:
       - nightly
