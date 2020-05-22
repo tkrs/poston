@@ -1,0 +1,44 @@
+name: CI (Linux)
+
+on: [push]
+
+jobs:
+  build_and_test:
+    strategy:
+      fail-fast: false
+      matrix:
+        version:
+          - 1.41.0
+          - stable
+          - nightly
+    name: ${{ matrix.version }} - x86_64-unknown-linux-gnu
+    runs-on: ubuntu-latest
+    services:
+      fluentd:
+        image: fluentd
+        ports:
+          - 24224:24224
+    steps:
+      - uses: actions/checkout@master
+      - name: Install ${{ matrix.version }}
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.version }}-x86_64-unknown-linux-gnu
+          components: rustfmt, clippy
+          override: true
+      - name: cargo fmt
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: -- --color=always --check
+      - name: cargo clippy
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --workspace -- -D warnings
+      - name: tests
+        uses: actions-rs/cargo@v1
+        timeout-minutes: 40
+        with:
+          command: test
+          args: --workspace --no-fail-fast -- --nocapture
