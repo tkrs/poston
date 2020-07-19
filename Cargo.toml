@@ -17,7 +17,7 @@ circle-ci = { repository = "tkrs/poston" }
 maintenance = { status = "experimental" }
 
 [dependencies]
-backoff = "0.1"
+backoff = "0.2"
 base64 = "0.12"
 crossbeam-channel = "0.4"
 log = "0.4"
@@ -31,14 +31,3 @@ uuid = { version = "0.8", features = ["v4"] }
 pretty_env_logger = "0.4"
 lazy_static = "1.4"
 rand = "0.7"
-
-[profile.dev]
-opt-level = 0
-debug = true
-rpath = false
-lto = false
-debug-assertions = true
-codegen-units = 1
-panic = 'unwind'
-incremental = true
-overflow-checks = true
