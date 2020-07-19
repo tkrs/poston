@@ -42,7 +42,7 @@ impl<S: WriteRead> Queue for QueueHandler<S> {
     }
 
     fn len(&self) -> usize {
-        self.emitters.values().map(|e| e.len()).sum()
+        self.emitters.values().map(Emitter::len).sum()
     }
 }
 
