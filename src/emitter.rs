@@ -6,6 +6,7 @@ use std::collections::VecDeque;
 use std::time::SystemTime;
 use uuid::Uuid;
 
+#[derive(Debug, PartialEq)]
 pub struct Emitter {
     tag: String,
     queue: RefCell<VecDeque<(SystemTime, Vec<u8>)>>,
