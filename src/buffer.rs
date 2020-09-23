@@ -37,7 +37,7 @@ pub struct AckReply {
 pub fn pack_record<'a>(
     buf: &mut Vec<u8>,
     tag: &'a str,
-    entries: Vec<(SystemTime, Vec<u8>)>,
+    entries: &'a [(SystemTime, Vec<u8>)],
     chunk: &'a str,
 ) -> Result<(), Error> {
     buf.push(0x93);
@@ -48,9 +48,7 @@ pub fn pack_record<'a>(
         buf.push(0x92);
         t.write_time(buf)
             .map_err(|e| Error::DeriveError(e.to_string()))?;
-        for elem in entry {
-            buf.push(elem);
-        }
+        buf.extend(entry.iter());
     }
     let options = Options {
         chunk: chunk.to_string(),
@@ -139,7 +137,7 @@ mod test_pack_record {
 
         for ((t, es, c), expected) in matrix {
             let mut buf = Vec::new();
-            pack_record(&mut buf, t, es, c).unwrap();
+            pack_record(&mut buf, t, es.as_slice(), c).unwrap();
             assert_eq!(buf, expected);
         }
     }
