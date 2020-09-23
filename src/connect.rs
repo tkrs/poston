@@ -148,20 +148,13 @@ where
         };
 
         let mut op = || {
-            if let Err(err) = self.write(buf) {
-                warn!(
-                    "Failed to write message, chunk: {}. cause: {:?}",
-                    chunk, err
-                );
-                let e = match err.kind() {
-                    io::ErrorKind::BrokenPipe
-                    | io::ErrorKind::NotConnected
-                    | io::ErrorKind::ConnectionRefused
-                    | io::ErrorKind::ConnectionAborted => self.reconnect(),
-                    _ => Err(err),
-                };
-                e.map_err(|e| RetryError::Transient(Error::NetworkError(e.to_string())))?;
-            }
+            self.write(buf).map_err(|e| {
+                warn!("Failed to write message, chunk: {}. cause: {:?}", chunk, e);
+                if let Err(err) = self.reconnect() {
+                    warn!("Failed to reconnect: {:?}", err);
+                }
+                RetryError::Transient(Error::NetworkError(e.to_string()))
+            })?;
 
             let mut read_backoff = ExponentialBackoff {
                 current_interval: self.read_retry_initial_delay(),
@@ -290,10 +283,12 @@ where
 mod tests {
     use super::{io, Duration, ToSocketAddrs};
     use super::{Connect, ConnectionSettings, Reconnect, Stream, TcpConfig};
+    use lazy_static::lazy_static;
     use std::collections::VecDeque;
     use std::convert::From;
     use std::io::{Read, Write};
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Mutex;
 
     #[derive(Debug)]
     pub struct TestStream(AtomicUsize);
@@ -395,7 +390,25 @@ mod tests {
         use super::*;
 
         #[derive(Debug)]
-        struct TS(RefCell<VecDeque<Result<usize, io::Error>>>);
+        struct TS;
+        lazy_static! {
+            static ref QUEUE: Mutex<RefCell<VecDeque<Result<usize, io::Error>>>> = {
+                let mut q = VecDeque::new();
+
+                let scenario = vec![
+                    Err(io::Error::from(io::ErrorKind::TimedOut)), // write ng.
+                    Err(io::Error::from(io::ErrorKind::BrokenPipe)), // write ng then reconnect.
+                    Ok(100), // write ok.
+                    Err(io::Error::from(io::ErrorKind::WouldBlock)), // read ng.
+                    Ok(64), // read ok.
+                ];
+                for s in scenario {
+                    q.push_back(s);
+                }
+                Mutex::new(RefCell::new(q))
+            };
+        };
+
         impl TcpConfig for TS {
             fn set_nodelay(&self, _v: bool) -> io::Result<()> {
                 Ok(())
@@ -412,32 +425,25 @@ mod tests {
             where
                 A: ToSocketAddrs + Clone,
             {
-                let scenario = vec![
-                    Err(io::Error::from(io::ErrorKind::TimedOut)),
-                    Ok(100),
-                    Err(io::Error::from(io::ErrorKind::WouldBlock)),
-                    Ok(64),
-                ];
-                let mut q = VecDeque::new();
-                for s in scenario {
-                    q.push_back(s);
-                }
-                Ok(TS(RefCell::new(q)))
+                Ok(TS)
             }
         }
         impl Write for TS {
             fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
-                let mut q = self.0.borrow_mut();
+                let q = QUEUE.lock().unwrap();
+                let mut q = q.borrow_mut();
                 q.pop_front().unwrap()
             }
             fn flush(&mut self) -> io::Result<()> {
-                let mut q = self.0.borrow_mut();
+                let q = QUEUE.lock().unwrap();
+                let mut q = q.borrow_mut();
                 q.pop_front().unwrap().map(|_| ())
             }
         }
         impl Read for TS {
             fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-                let mut q = self.0.borrow_mut();
+                let q = QUEUE.lock().unwrap();
+                let mut q = q.borrow_mut();
                 let a = q.pop_front().unwrap();
                 if a.is_ok() {
                     let ack: [u8; 64] = [
