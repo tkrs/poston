@@ -46,7 +46,7 @@ fn main() {
         let t = thread::spawn(move || {
             info!("Start sending messages. No {}.", i);
             let mut rng = thread_rng();
-            for _ in 0..10_000 {
+            for _ in 0..50_000 {
                 let name: String = rng.sample_iter(&Alphanumeric).take(30).collect();
                 let age: u32 = rng.gen_range(1, 100);
 

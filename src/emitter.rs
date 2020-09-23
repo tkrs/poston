@@ -42,7 +42,12 @@ impl Emitter {
         let chunk = base64::encode(&Uuid::new_v4().to_string());
 
         let mut buf = Vec::new();
-        buffer::pack_record(&mut buf, self.tag.as_str(), entries, chunk.as_str())?;
+        buffer::pack_record(
+            &mut buf,
+            self.tag.as_str(),
+            entries.as_slice(),
+            chunk.as_str(),
+        )?;
         rw.write_and_read(&buf, &chunk)
     }
 }
