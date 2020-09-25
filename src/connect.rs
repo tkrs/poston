@@ -4,14 +4,15 @@ use backoff::{Error as RetryError, ExponentialBackoff, Operation};
 use std::cell::RefCell;
 use std::fmt::Debug;
 use std::io::{self, Read, Write};
-use std::net::{TcpStream, ToSocketAddrs};
-use std::thread;
+use std::net::{Shutdown, TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
 pub trait Connect<T> {
     fn connect<A>(addr: A, settings: ConnectionSettings) -> io::Result<T>
     where
         A: ToSocketAddrs + Clone + Debug;
+
+    fn close(&mut self) -> io::Result<()>;
 }
 
 pub trait Reconnect {
@@ -24,9 +25,10 @@ pub trait WriteRead {
 
 #[derive(Debug)]
 pub struct Stream<A, S> {
-    pub addr: A,
-    pub stream: RefCell<S>,
-    pub settings: ConnectionSettings,
+    addr: A,
+    stream: RefCell<S>,
+    settings: ConnectionSettings,
+    should_reconnect: RefCell<bool>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -54,11 +56,22 @@ where
     pub fn connect(addr: A, settings: ConnectionSettings) -> io::Result<Stream<A, S>> {
         let stream = connect_with_retry(addr.clone(), settings)?;
         let stream = RefCell::new(stream);
+        let should_reconnect = RefCell::new(false);
         Ok(Self {
             addr,
             stream,
             settings,
+            should_reconnect,
         })
+    }
+
+    pub fn close(&mut self) -> io::Result<()> {
+        *self.should_reconnect.borrow_mut() = true;
+        self.stream.borrow_mut().close()
+    }
+
+    fn should_reconnect(&self) -> bool {
+        *self.should_reconnect.borrow()
     }
 
     fn write_retry_initial_delay(&self) -> Duration {
@@ -90,6 +103,7 @@ where
     fn reconnect(&mut self) -> io::Result<()> {
         debug!("Start reconnect()");
         let stream = connect_with_retry(self.addr.clone(), self.settings)?;
+        *self.should_reconnect.borrow_mut() = false;
         *self.stream.borrow_mut() = stream;
         debug!("End reconnect()");
         Ok(())
@@ -133,13 +147,19 @@ where
         };
 
         let mut op = || {
-            self.write(buf).map_err(|e| {
-                warn!("Failed to write message, chunk: {}. cause: {:?}", chunk, e);
-                if let Err(err) = self.reconnect() {
-                    warn!("Failed to reconnect: {:?}", err);
-                }
-                RetryError::Transient(Error::NetworkError(e.to_string()))
-            })?;
+            if self.should_reconnect() {
+                self.reconnect()
+                    .map_err(|e| RetryError::Transient(Error::NetworkError(e.to_string())))?;
+            }
+            self.write_all(buf)
+                .and_then(|_| self.flush())
+                .map_err(|e| {
+                    warn!("Failed to write message, chunk: {}. cause: {:?}", chunk, e);
+                    if let Err(err) = self.close() {
+                        debug!("Failed to close the stream: {:?}", err);
+                    }
+                    RetryError::Transient(Error::NetworkError(e.to_string()))
+                })?;
 
             let mut read_backoff = ExponentialBackoff {
                 current_interval: self.read_retry_initial_delay(),
@@ -149,20 +169,29 @@ where
                 ..Default::default()
             };
 
-            let mut resp_buf = [0u8; 64];
+            let mut resp_buf = [0u8; 55];
 
             let mut read_op = || {
-                self.read(&mut resp_buf).map_err(|e| {
+                self.read_exact(&mut resp_buf).map_err(|e| {
                     debug!("Failed to read response, chunk: {}, cause: {:?}", chunk, e);
-                    if e.kind() == io::ErrorKind::WouldBlock {
-                        RetryError::Transient(Error::NetworkError(e.to_string()))
-                    } else {
-                        RetryError::Permanent(Error::NetworkError(e.to_string()))
+                    use io::ErrorKind::*;
+                    match e.kind() {
+                        WouldBlock | TimedOut => {
+                            RetryError::Transient(Error::NetworkError(e.to_string()))
+                        }
+                        UnexpectedEof | BrokenPipe | ConnectionAborted | ConnectionRefused
+                        | ConnectionReset => {
+                            if let Err(err) = self.close() {
+                                debug!("Failed to close the stream: {:?}", err);
+                            }
+                            RetryError::Permanent(Error::NetworkError(e.to_string()))
+                        }
+                        _ => RetryError::Permanent(Error::NetworkError(e.to_string())),
                     }
                 })
             };
 
-            let read_size = read_op.retry(&mut read_backoff).map_err(|e| {
+            read_op.retry(&mut read_backoff).map_err(|e| {
                 warn!("Failed to read response, chunk: {}, cause: {:?}", chunk, e);
                 match e {
                     RetryError::Permanent(e) => RetryError::Transient(e),
@@ -170,31 +199,20 @@ where
                 }
             })?;
 
-            // It seems that `read()` returns `Ok(0)` while Fluentd is reloading configuration, and
-            // it takes a few seconds to be restarted them. Also even if the same message retry
-            // writing, 0 is returned unless the connection is reconnected.
-            if read_size == 0 {
-                warn!("Received empty response, chunk: {}", chunk);
-                thread::sleep(Duration::from_secs(5));
-                if let Err(err) = self.reconnect() {
-                    warn!("Failed to reconnect: {:?}", err);
-                }
-                Err(RetryError::Transient(Error::NoAckResponseError))
+            let reply = buffer::unpack_response(&resp_buf, resp_buf.len())
+                .map_err(RetryError::Transient)?;
+            if reply.ack == chunk {
+                Ok(())
             } else {
-                let reply =
-                    buffer::unpack_response(&resp_buf, read_size).map_err(RetryError::Transient)?;
-                if reply.ack == chunk {
-                    Ok(())
-                } else {
-                    warn!(
-                        "Did not match ack and chunk, ack: {}, chunk: {}",
-                        reply.ack, chunk
-                    );
-                    Err(RetryError::Transient(Error::AckUmatchedError(
-                        reply.ack,
-                        chunk.to_string(),
-                    )))
-                }
+                warn!(
+                    "Did not match ack and chunk, ack: {}, chunk: {}",
+                    reply.ack, chunk
+                );
+
+                Err(RetryError::Transient(Error::AckUmatchedError(
+                    reply.ack,
+                    chunk.to_string(),
+                )))
             }
         };
 
@@ -215,6 +233,10 @@ impl Connect<TcpStream> for TcpStream {
             s.set_write_timeout(Some(settings.write_timeout)).unwrap();
             s
         })
+    }
+
+    fn close(&mut self) -> io::Result<()> {
+        self.shutdown(Shutdown::Both)
     }
 }
 
@@ -282,6 +304,9 @@ mod tests {
                 } else {
                     Err(io::Error::from(io::ErrorKind::ConnectionRefused))
                 }
+            }
+            fn close(&mut self) -> io::Result<()> {
+                Ok(())
             }
         }
         impl Write for TestStream {
@@ -354,10 +379,10 @@ mod tests {
 
                 let scenario = vec![
                     Err(io::Error::from(io::ErrorKind::TimedOut)), // write ng.
-                    Err(io::Error::from(io::ErrorKind::BrokenPipe)), // write ng then reconnect.
-                    Ok(100), // write ok.
+                    Err(io::Error::from(io::ErrorKind::BrokenPipe)), // write ng.
+                    Ok(1), // write ok.
                     Err(io::Error::from(io::ErrorKind::WouldBlock)), // read ng.
-                    Ok(64), // read ok.
+                    Ok(55), // read ok.
                 ];
                 for s in scenario {
                     q.push_back(s);
@@ -373,6 +398,10 @@ mod tests {
             {
                 Ok(TS)
             }
+
+            fn close(&mut self) -> io::Result<()> {
+                Ok(())
+            }
         }
         impl Write for TS {
             fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
@@ -381,9 +410,7 @@ mod tests {
                 q.pop_front().unwrap()
             }
             fn flush(&mut self) -> io::Result<()> {
-                let q = QUEUE.lock().unwrap();
-                let mut q = q.borrow_mut();
-                q.pop_front().unwrap().map(|_| ())
+                Ok(())
             }
         }
         impl Read for TS {
@@ -392,13 +419,12 @@ mod tests {
                 let mut q = q.borrow_mut();
                 let a = q.pop_front().unwrap();
                 if a.is_ok() {
-                    let ack: [u8; 64] = [
+                    let ack: [u8; 55] = [
                         0x81, 0xa3, 0x61, 0x63, 0x6b, 0xd9, 0x30, 0x5a, 0x6d, 0x46, 0x6c, 0x4e,
                         0x57, 0x5a, 0x6a, 0x4e, 0x6a, 0x45, 0x74, 0x59, 0x32, 0x55, 0x77, 0x5a,
                         0x43, 0x30, 0x30, 0x4e, 0x47, 0x45, 0x35, 0x4c, 0x57, 0x49, 0x31, 0x5a,
                         0x54, 0x4d, 0x74, 0x4d, 0x32, 0x59, 0x7a, 0x5a, 0x6a, 0x68, 0x69, 0x4e,
-                        0x54, 0x51, 0x33, 0x5a, 0x6d, 0x45, 0x77, 0x00, 0x00, 0x00, 0x00, 0x00,
-                        0x00, 0x00, 0x00, 0x00,
+                        0x54, 0x51, 0x33, 0x5a, 0x6d, 0x45, 0x77,
                     ];
                     for (i, b) in ack.iter().enumerate() {
                         buf[i] = *b;
