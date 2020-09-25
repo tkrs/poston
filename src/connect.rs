@@ -156,7 +156,7 @@ where
                 .map_err(|e| {
                     warn!("Failed to write message, chunk: {}. cause: {:?}", chunk, e);
                     if let Err(err) = self.close() {
-                        debug!("Failed to close the stream: {:?}", err);
+                        debug!("Failed to close the stream, cause: {:?}", err);
                     }
                     RetryError::Transient(Error::NetworkError(e.to_string()))
                 })?;
@@ -182,7 +182,7 @@ where
                         UnexpectedEof | BrokenPipe | ConnectionAborted | ConnectionRefused
                         | ConnectionReset => {
                             if let Err(err) = self.close() {
-                                debug!("Failed to close the stream: {:?}", err);
+                                debug!("Failed to close the stream, cause: {:?}", err);
                             }
                             RetryError::Permanent(Error::NetworkError(e.to_string()))
                         }
@@ -195,7 +195,13 @@ where
                 warn!("Failed to read response, chunk: {}, cause: {:?}", chunk, e);
                 match e {
                     RetryError::Permanent(e) => RetryError::Transient(e),
-                    err => err,
+                    RetryError::Transient(e) => {
+                        // close stream and retry will be skipped if it is WouldBlock/TimeOut.
+                        if let Err(err) = self.close() {
+                            debug!("Failed to close the stream, cause: {:?}", err);
+                        }
+                        RetryError::Permanent(e)
+                    }
                 }
             })?;
 
