@@ -4,7 +4,7 @@ use crossbeam_channel::{Receiver, Sender};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io;
-use std::net::{Shutdown, TcpStream, ToSocketAddrs};
+use std::net::{TcpStream, ToSocketAddrs};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
@@ -28,9 +28,7 @@ impl Worker {
         let handler = thread_builder.spawn(move || {
             start_worker(&mut stream, receiver, flush_period, flush_size);
             stream
-                .stream
-                .borrow_mut()
-                .shutdown(Shutdown::Both)
+                .close()
                 .unwrap_or_else(|e| panic!("Failed to shutdown the stream: {:?}", e));
         })?;
 
