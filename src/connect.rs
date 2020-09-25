@@ -8,29 +8,14 @@ use std::net::{TcpStream, ToSocketAddrs};
 use std::thread;
 use std::time::Duration;
 
-pub trait Connect<T>
-where
-    T: TcpConfig,
-{
-    fn connect<A>(addr: A) -> io::Result<T>
+pub trait Connect<T> {
+    fn connect<A>(addr: A, settings: ConnectionSettings) -> io::Result<T>
     where
         A: ToSocketAddrs + Clone + Debug;
 }
 
-pub trait TcpConfig {
-    fn set_nodelay(&self, v: bool) -> io::Result<()>;
-    fn set_read_timeout(&self, v: Option<Duration>) -> io::Result<()>;
-    fn set_write_timeout(&self, v: Option<Duration>) -> io::Result<()>;
-}
-
 pub trait Reconnect {
     fn reconnect(&mut self) -> io::Result<()>;
-}
-
-pub trait ConnectRetryDelay {
-    fn connect_retry_initial_delay(&self) -> Duration;
-    fn connect_retry_timeout(&self) -> Duration;
-    fn connect_retry_max_delay(&self) -> Duration;
 }
 
 pub trait WriteRead {
@@ -64,7 +49,7 @@ pub struct ConnectionSettings {
 impl<A, S> Stream<A, S>
 where
     A: ToSocketAddrs + Clone + Debug,
-    S: Connect<S> + TcpConfig,
+    S: Connect<S>,
 {
     pub fn connect(addr: A, settings: ConnectionSettings) -> io::Result<Stream<A, S>> {
         let stream = connect_with_retry(addr.clone(), settings)?;
@@ -100,7 +85,7 @@ where
 impl<A, S> Reconnect for Stream<A, S>
 where
     A: ToSocketAddrs + Clone + Debug,
-    S: Connect<S> + TcpConfig,
+    S: Connect<S>,
 {
     fn reconnect(&mut self) -> io::Result<()> {
         debug!("Start reconnect()");
@@ -136,7 +121,7 @@ where
 impl<A, S> WriteRead for &mut Stream<A, S>
 where
     A: ToSocketAddrs + Clone + Debug,
-    S: Connect<S> + TcpConfig + Read + Write,
+    S: Connect<S> + Read + Write,
 {
     fn write_and_read(&mut self, buf: &[u8], chunk: &str) -> Result<(), Error> {
         let mut backoff = ExponentialBackoff {
@@ -219,33 +204,24 @@ where
     }
 }
 
-impl TcpConfig for TcpStream {
-    fn set_nodelay(&self, v: bool) -> io::Result<()> {
-        self.set_nodelay(v)
-    }
-
-    fn set_read_timeout(&self, v: Option<Duration>) -> io::Result<()> {
-        self.set_read_timeout(v)
-    }
-
-    fn set_write_timeout(&self, v: Option<Duration>) -> io::Result<()> {
-        self.set_write_timeout(v)
-    }
-}
-
 impl Connect<TcpStream> for TcpStream {
-    fn connect<A>(addr: A) -> io::Result<TcpStream>
+    fn connect<A>(addr: A, settings: ConnectionSettings) -> io::Result<TcpStream>
     where
         A: ToSocketAddrs + Clone + Debug,
     {
-        TcpStream::connect(addr)
+        TcpStream::connect(addr).map(|s| {
+            s.set_nodelay(true).unwrap();
+            s.set_read_timeout(Some(settings.read_timeout)).unwrap();
+            s.set_write_timeout(Some(settings.write_timeout)).unwrap();
+            s
+        })
     }
 }
 
 fn connect_with_retry<C, A>(addr: A, settings: ConnectionSettings) -> io::Result<C>
 where
     A: ToSocketAddrs + Clone + Debug,
-    C: Connect<C> + TcpConfig,
+    C: Connect<C>,
 {
     let mut backoff = ExponentialBackoff {
         current_interval: settings.connect_retry_initial_delay,
@@ -258,17 +234,10 @@ where
     let mut op = || {
         let addr = addr.clone();
         debug!("Start connect to {:?}", addr);
-        C::connect(&addr)
-            .map(|s| {
-                s.set_nodelay(true).unwrap();
-                s.set_read_timeout(Some(settings.read_timeout)).unwrap();
-                s.set_write_timeout(Some(settings.write_timeout)).unwrap();
-                s
-            })
-            .map_err(|err| {
-                warn!("Failed to connect to {:?}", addr);
-                RetryError::Transient(err)
-            })
+        C::connect(&addr, settings).map_err(|err| {
+            warn!("Failed to connect to {:?}", addr);
+            RetryError::Transient(err)
+        })
     };
 
     op.retry(&mut backoff).map_err(|e| match e {
@@ -282,7 +251,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::{io, Duration, ToSocketAddrs};
-    use super::{Connect, ConnectionSettings, Reconnect, Stream, TcpConfig};
+    use super::{Connect, ConnectionSettings, Reconnect, Stream};
     use lazy_static::lazy_static;
     use std::collections::VecDeque;
     use std::convert::From;
@@ -293,25 +262,13 @@ mod tests {
     #[derive(Debug)]
     pub struct TestStream(AtomicUsize);
 
-    impl TcpConfig for TestStream {
-        fn set_nodelay(&self, _v: bool) -> io::Result<()> {
-            Ok(())
-        }
-        fn set_read_timeout(&self, _v: Option<Duration>) -> io::Result<()> {
-            Ok(())
-        }
-        fn set_write_timeout(&self, _v: Option<Duration>) -> io::Result<()> {
-            Ok(())
-        }
-    }
-
     mod s {
         use super::*;
 
         static CONN_COUNT: AtomicUsize = AtomicUsize::new(1);
 
         impl Connect<TestStream> for TestStream {
-            fn connect<A>(addr: A) -> io::Result<TestStream>
+            fn connect<A>(addr: A, _s: ConnectionSettings) -> io::Result<TestStream>
             where
                 A: ToSocketAddrs + Clone,
             {
@@ -409,19 +366,8 @@ mod tests {
             };
         };
 
-        impl TcpConfig for TS {
-            fn set_nodelay(&self, _v: bool) -> io::Result<()> {
-                Ok(())
-            }
-            fn set_read_timeout(&self, _v: Option<Duration>) -> io::Result<()> {
-                Ok(())
-            }
-            fn set_write_timeout(&self, _v: Option<Duration>) -> io::Result<()> {
-                Ok(())
-            }
-        }
         impl Connect<TS> for TS {
-            fn connect<A>(_addr: A) -> io::Result<TS>
+            fn connect<A>(_addr: A, _s: ConnectionSettings) -> io::Result<TS>
             where
                 A: ToSocketAddrs + Clone,
             {
