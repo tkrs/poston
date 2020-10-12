@@ -19,7 +19,7 @@ maintenance = { status = "experimental" }
 [dependencies]
 backoff = "0.2"
 base64 = "0.13"
-crossbeam-channel = "0.4"
+crossbeam-channel = "0.5"
 log = "0.4"
 rmp = "0.8"
 rmp-serde = "0.14"
