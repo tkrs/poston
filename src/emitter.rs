@@ -2,6 +2,7 @@ use crate::buffer::{self, Take};
 use crate::connect::*;
 use crate::error::Error;
 use std::cell::RefCell;
+use std::cmp;
 use std::collections::VecDeque;
 use std::time::SystemTime;
 use uuid::Uuid;
@@ -32,11 +33,8 @@ impl Emitter {
         if queue.is_empty() {
             return Ok(());
         }
-        let q_size = queue.len();
-        let size = size.unwrap_or_else(|| q_size);
-        let size = if q_size < size { q_size } else { size };
-
-        let mut entries = Vec::with_capacity(size);
+        let qlen = queue.len();
+        let mut entries = Vec::with_capacity(cmp::min(qlen, size.unwrap_or(qlen)));
         queue.take(&mut entries);
 
         let chunk = base64::encode(&Uuid::new_v4().to_string());
