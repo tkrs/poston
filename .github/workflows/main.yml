@@ -32,9 +32,8 @@ jobs:
           SCCACHE_VERSION: 0.2.13
         run: |
           curl -L "$SCCACHE_LINK/$SCCACHE_VERSION/sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl.tar.gz" | tar xz
-          echo "::add-path::$PWD/sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl/"
-      - name: Set up RUSTC_WRAPPER
-        run: echo "::set-env name=RUSTC_WRAPPER::sccache"
+          echo "$PWD/sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl/" >> $GITHUB_PATH
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
       - name: Cargo fmt
         uses: actions-rs/cargo@v1
         with:
