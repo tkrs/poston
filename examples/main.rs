@@ -9,8 +9,8 @@ use poston::{Client, Settings, WorkerPool};
 use pretty_env_logger;
 use rand::prelude::*;
 use rand::{self, distributions::Alphanumeric};
-use std::thread;
 use std::time::{Duration, Instant, SystemTime};
+use std::{iter, thread};
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 struct Human {
@@ -47,8 +47,12 @@ fn main() {
             info!("Start sending messages. No {}.", i);
             let mut rng = thread_rng();
             for _ in 0..50_000 {
-                let name: String = rng.sample_iter(&Alphanumeric).take(30).collect();
-                let age: u32 = rng.gen_range(1, 100);
+                let name: String = iter::repeat(())
+                    .map(|_| rng.sample(Alphanumeric))
+                    .map(char::from)
+                    .take(30)
+                    .collect();
+                let age: u32 = rng.gen_range(1..100);
 
                 let tag = format!("test.human.age.{}", &age);
                 let a = Human { age, name };
@@ -56,7 +60,7 @@ fn main() {
 
                 POOL.send(tag, &a, timestamp).unwrap();
 
-                let dur = rng.gen_range(10, 500000);
+                let dur = rng.gen_range(10..500000);
                 thread::sleep(Duration::new(0, dur));
             }
         });
