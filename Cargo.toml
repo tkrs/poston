@@ -17,7 +17,7 @@ circle-ci = { repository = "tkrs/poston" }
 maintenance = { status = "experimental" }
 
 [dependencies]
-backoff = "0.2"
+backoff = "0.3"
 base64 = "0.13"
 crossbeam-channel = "0.5"
 log = "0.4"
