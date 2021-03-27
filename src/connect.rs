@@ -1,6 +1,6 @@
 use crate::buffer;
 use crate::error::Error;
-use backoff::{Error as RetryError, ExponentialBackoff, Operation};
+use backoff::{Error as RetryError, ExponentialBackoff};
 use std::cell::RefCell;
 use std::fmt::Debug;
 use std::io::{self, Read, Write};
@@ -138,7 +138,7 @@ where
     S: Connect<S> + Read + Write,
 {
     fn write_and_read(&mut self, buf: &[u8], chunk: &str) -> Result<(), Error> {
-        let mut backoff = ExponentialBackoff {
+        let backoff = ExponentialBackoff {
             current_interval: self.write_retry_initial_delay(),
             initial_interval: self.write_retry_initial_delay(),
             max_interval: self.write_retry_max_delay(),
@@ -146,7 +146,7 @@ where
             ..Default::default()
         };
 
-        let mut op = || {
+        let op = || {
             if self.should_reconnect() {
                 self.reconnect()
                     .map_err(|e| RetryError::Transient(Error::NetworkError(e.to_string())))?;
@@ -161,7 +161,7 @@ where
                     RetryError::Transient(Error::NetworkError(e.to_string()))
                 })?;
 
-            let mut read_backoff = ExponentialBackoff {
+            let read_backoff = ExponentialBackoff {
                 current_interval: self.read_retry_initial_delay(),
                 initial_interval: self.read_retry_initial_delay(),
                 max_interval: self.read_retry_max_delay(),
@@ -171,7 +171,7 @@ where
 
             let mut resp_buf = [0u8; 55];
 
-            let mut read_op = || {
+            let read_op = || {
                 self.read_exact(&mut resp_buf).map_err(|e| {
                     debug!("Failed to read response, chunk: {}, cause: {:?}", chunk, e);
                     use io::ErrorKind::*;
@@ -191,7 +191,7 @@ where
                 })
             };
 
-            read_op.retry(&mut read_backoff).map_err(|e| {
+            backoff::retry(read_backoff, read_op).map_err(|e| {
                 warn!("Failed to read response, chunk: {}, cause: {:?}", chunk, e);
                 match e {
                     RetryError::Permanent(e) => RetryError::Transient(e),
@@ -222,7 +222,7 @@ where
             }
         };
 
-        op.retry(&mut backoff).map_err(|e| match e {
+        backoff::retry(backoff, op).map_err(|e| match e {
             RetryError::Permanent(err) | RetryError::Transient(err) => err,
         })
     }
@@ -251,7 +251,7 @@ where
     A: ToSocketAddrs + Clone + Debug,
     C: Connect<C>,
 {
-    let mut backoff = ExponentialBackoff {
+    let backoff = ExponentialBackoff {
         current_interval: settings.connect_retry_initial_delay,
         initial_interval: settings.connect_retry_initial_delay,
         max_interval: settings.connect_retry_max_delay,
@@ -259,7 +259,7 @@ where
         ..Default::default()
     };
 
-    let mut op = || {
+    let op = || {
         let addr = addr.clone();
         debug!("Start connect to {:?}", addr);
         C::connect(&addr, settings).map_err(|err| {
@@ -268,7 +268,7 @@ where
         })
     };
 
-    op.retry(&mut backoff).map_err(|e| match e {
+    backoff::retry(backoff, op).map_err(|e| match e {
         RetryError::Permanent(err) | RetryError::Transient(err) => {
             error!("Failed to connect to server, cause: {:?}", err);
             err
