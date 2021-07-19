@@ -61,7 +61,7 @@ jobs:
           args: --ignore-tests
       - name: Upload to Codecov
         if: matrix.version == 'stable'
-        uses: codecov/codecov-action@v1
+        uses: codecov/codecov-action@v2.0.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
       - name: Archive code coverage results
