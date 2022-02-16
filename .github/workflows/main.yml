@@ -8,7 +8,7 @@ jobs:
       fail-fast: false
       matrix:
         version:
-          - 1.41.0
+          - 1.54.0
           - stable
           - nightly
     name: Test and Build - ${{ matrix.version }}
@@ -85,4 +85,4 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --workspace --verbose -- -D warnings
+          args: --workspace --verbose
