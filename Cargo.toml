@@ -22,7 +22,7 @@ base64 = "0.13"
 crossbeam-channel = "0.5"
 log = "0.4"
 rmp = "0.8"
-rmp-serde = "0.15"
+rmp-serde = "1.0"
 serde = "1.0"
 serde_derive = "1.0"
 uuid = { version = "0.8", features = ["v4"] }
