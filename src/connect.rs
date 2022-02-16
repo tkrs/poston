@@ -149,7 +149,7 @@ where
         let op = || {
             if self.should_reconnect() {
                 self.reconnect()
-                    .map_err(|e| RetryError::Transient(Error::NetworkError(e.to_string())))?;
+                    .map_err(|e| RetryError::transient(Error::NetworkError(e.to_string())))?;
             }
             self.write_all(buf)
                 .and_then(|_| self.flush())
@@ -158,7 +158,7 @@ where
                     if let Err(err) = self.close() {
                         debug!("Failed to close the stream, cause: {:?}", err);
                     }
-                    RetryError::Transient(Error::NetworkError(e.to_string()))
+                    RetryError::transient(Error::NetworkError(e.to_string()))
                 })?;
 
             let read_backoff = ExponentialBackoff {
@@ -177,14 +177,14 @@ where
                     use io::ErrorKind::*;
                     match e.kind() {
                         WouldBlock | TimedOut => {
-                            RetryError::Transient(Error::NetworkError(e.to_string()))
+                            RetryError::transient(Error::NetworkError(e.to_string()))
                         }
                         UnexpectedEof | BrokenPipe | ConnectionAborted | ConnectionRefused
                         | ConnectionReset => {
                             if let Err(err) = self.close() {
                                 debug!("Failed to close the stream, cause: {:?}", err);
                             }
-                            RetryError::Permanent(Error::NetworkError(e.to_string()))
+                            RetryError::permanent(Error::NetworkError(e.to_string()))
                         }
                         _ => RetryError::Permanent(Error::NetworkError(e.to_string())),
                     }
@@ -194,8 +194,8 @@ where
             backoff::retry(read_backoff, read_op).map_err(|e| {
                 warn!("Failed to read response, chunk: {}, cause: {:?}", chunk, e);
                 match e {
-                    RetryError::Permanent(e) => RetryError::Transient(e),
-                    RetryError::Transient(e) => {
+                    RetryError::Permanent(e) => RetryError::transient(e),
+                    RetryError::Transient { err: e, .. } => {
                         // close stream and retry will be skipped if it is WouldBlock/TimeOut.
                         if let Err(err) = self.close() {
                             debug!("Failed to close the stream, cause: {:?}", err);
@@ -206,7 +206,7 @@ where
             })?;
 
             let reply = buffer::unpack_response(&resp_buf, resp_buf.len())
-                .map_err(RetryError::Transient)?;
+                .map_err(RetryError::transient)?;
             if reply.ack == chunk {
                 Ok(())
             } else {
@@ -215,7 +215,7 @@ where
                     reply.ack, chunk
                 );
 
-                Err(RetryError::Transient(Error::AckUmatchedError(
+                Err(RetryError::transient(Error::AckUmatchedError(
                     reply.ack,
                     chunk.to_string(),
                 )))
@@ -223,7 +223,7 @@ where
         };
 
         backoff::retry(backoff, op).map_err(|e| match e {
-            RetryError::Permanent(err) | RetryError::Transient(err) => err,
+            RetryError::Permanent(err) | RetryError::Transient { err, .. } => err,
         })
     }
 }
@@ -264,12 +264,12 @@ where
         debug!("Start connect to {:?}", addr);
         C::connect(&addr, settings).map_err(|err| {
             warn!("Failed to connect to {:?}", addr);
-            RetryError::Transient(err)
+            RetryError::transient(err)
         })
     };
 
     backoff::retry(backoff, op).map_err(|e| match e {
-        RetryError::Permanent(err) | RetryError::Transient(err) => {
+        RetryError::Permanent(err) | RetryError::Transient { err, .. } => {
             error!("Failed to connect to server, cause: {:?}", err);
             err
         }
