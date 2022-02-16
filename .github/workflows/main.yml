@@ -8,7 +8,7 @@ jobs:
       fail-fast: false
       matrix:
         version:
-          - 1.41.0
+          - 1.54.0
           - stable
           - nightly
     name: Test and Build - ${{ matrix.version }}
