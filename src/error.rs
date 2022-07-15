@@ -13,9 +13,11 @@ pub enum Error {
     NoAckResponseError,
 }
 
-impl StdError for Error {
-    fn description(&self) -> &str {
-        match *self {
+impl StdError for Error {}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match *self {
             Error::NetworkError(ref e) => e,
             Error::DeriveError(ref e) => e,
             Error::SendError(ref e) => e,
@@ -24,12 +26,7 @@ impl StdError for Error {
             Error::EmittingTimeoutError => "emitting timeout",
             Error::ConnectingTimeoutError => "connecting timeout",
             Error::NoAckResponseError => "no ack response",
-        }
-    }
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
+        };
+        write!(f, "{}", s)
     }
 }
