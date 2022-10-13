@@ -22,10 +22,10 @@ base64 = "0.13"
 crossbeam-channel = "0.5"
 log = "0.4"
 rmp = "0.8"
-rmp-serde = "1.0"
+rmp-serde = "1.1"
 serde = "1.0"
 serde_derive = "1.0"
-uuid = { version = "1.1", features = ["v4"] }
+uuid = { version = "1.2", features = ["v4"] }
 
 [dev-dependencies]
 pretty_env_logger = "0.4"
