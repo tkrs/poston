@@ -1,5 +1,5 @@
 [package]
-edition = "2018"
+edition = "2021"
 name = "poston"
 version = "0.7.5-alpha.0"
 authors = ["Takeru Sato <type.in.type@gmail.com>"]
