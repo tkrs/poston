@@ -1,10 +1,8 @@
 #[macro_use]
-extern crate lazy_static;
-#[macro_use]
-extern crate log;
-#[macro_use]
 extern crate serde_derive;
 
+use log::info;
+use once_cell::sync::Lazy;
 use poston::{Client, Settings, WorkerPool};
 use pretty_env_logger;
 use rand::prelude::*;
@@ -18,20 +16,18 @@ struct Human {
     name: String,
 }
 
-lazy_static! {
-    static ref POOL: WorkerPool = {
-        let addr = "127.0.0.1:24224".to_string();
-        let settins = Settings {
-            flush_period: Duration::from_millis(10),
-            max_flush_entries: 1000,
-            connection_retry_timeout: Duration::from_secs(60),
-            write_timeout: Duration::from_secs(30),
-            read_timeout: Duration::from_secs(30),
-            ..Default::default()
-        };
-        WorkerPool::with_settings(&addr, &settins).expect("Couldn't create the worker pool.")
+static POOL: Lazy<WorkerPool> = Lazy::new(|| {
+    let addr = "127.0.0.1:24224".to_string();
+    let settins = Settings {
+        flush_period: Duration::from_millis(10),
+        max_flush_entries: 1000,
+        connection_retry_timeout: Duration::from_secs(60),
+        write_timeout: Duration::from_secs(30),
+        read_timeout: Duration::from_secs(30),
+        ..Default::default()
     };
-}
+    WorkerPool::with_settings(&addr, &settins).expect("Couldn't create the worker pool.")
+});
 
 fn main() {
     pretty_env_logger::init();
