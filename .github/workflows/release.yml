@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  release-crate:
+    environment: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Setup git user
+        run: |
+          git config --global user.email "type.in.type@gmail.com"
+          git config --global user.name "Takeru Sato"
+      - run: git submodule update --init --recursive
+      - name: Install rust toolchain stable
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable-x86_64-unknown-linux-gnu
+          override: true
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+      - run: sudo npm install -g standard-version
+      - name: Determine tag and generate release body
+        run: standard-version --infile RELEASE_BODY.md --skip.commit
+      - name: Generate release context
+        id: release_context
+        run: |
+          tag="$(git describe HEAD --abbrev=0)"
+          echo "tag_name=$tag" >>$GITHUB_OUTPUT
+          echo "version=${tag/v/}" >>$GITHUB_OUTPUT
+          git tag -d "${tag}"
+      - name: Install cargo-release
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-release
+      - run: cargo release ${{ steps.release_context.outputs.version }} --execute --no-confirm
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+      - name: Create release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release ${{ steps.release_context.outputs.tag_name }}
+          tag_name: ${{ steps.release_context.outputs.tag_name }}
+          body_path: RELEASE_BODY.md
