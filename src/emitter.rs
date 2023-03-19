@@ -1,6 +1,7 @@
 use crate::buffer::{self, Take};
 use crate::connect::*;
 use crate::error::Error;
+use base64::{engine::general_purpose, Engine as _};
 use std::cell::RefCell;
 use std::cmp;
 use std::collections::VecDeque;
@@ -37,7 +38,7 @@ impl Emitter {
         let mut entries = Vec::with_capacity(cmp::min(qlen, size.unwrap_or(qlen)));
         queue.take(&mut entries);
 
-        let chunk = base64::encode(&Uuid::new_v4().to_string());
+        let chunk = general_purpose::STANDARD.encode(Uuid::new_v4());
 
         let mut buf = Vec::new();
         buffer::pack_record(
@@ -117,7 +118,7 @@ mod test {
 
     impl WriteRead for TestErrStream {
         fn write_and_read(&mut self, _buf: &[u8], _chunk: &str) -> Result<(), Error> {
-            Err(Error::AckUmatchedError("a".to_string(), "b".to_string()))
+            Err(Error::AckUmatched("a".to_string(), "b".to_string()))
         }
     }
 

@@ -149,7 +149,7 @@ where
         let op = || {
             if self.should_reconnect() {
                 self.reconnect()
-                    .map_err(|e| RetryError::transient(Error::NetworkError(e.to_string())))?;
+                    .map_err(|e| RetryError::transient(Error::Network(e.to_string())))?;
             }
             self.write_all(buf)
                 .and_then(|_| self.flush())
@@ -158,7 +158,7 @@ where
                     if let Err(err) = self.close() {
                         debug!("Failed to close the stream, cause: {:?}", err);
                     }
-                    RetryError::transient(Error::NetworkError(e.to_string()))
+                    RetryError::transient(Error::Network(e.to_string()))
                 })?;
 
             let read_backoff = ExponentialBackoff {
@@ -177,16 +177,16 @@ where
                     use io::ErrorKind::*;
                     match e.kind() {
                         WouldBlock | TimedOut => {
-                            RetryError::transient(Error::NetworkError(e.to_string()))
+                            RetryError::transient(Error::Network(e.to_string()))
                         }
                         UnexpectedEof | BrokenPipe | ConnectionAborted | ConnectionRefused
                         | ConnectionReset => {
                             if let Err(err) = self.close() {
                                 debug!("Failed to close the stream, cause: {:?}", err);
                             }
-                            RetryError::permanent(Error::NetworkError(e.to_string()))
+                            RetryError::permanent(Error::Network(e.to_string()))
                         }
-                        _ => RetryError::Permanent(Error::NetworkError(e.to_string())),
+                        _ => RetryError::Permanent(Error::Network(e.to_string())),
                     }
                 })
             };
@@ -215,7 +215,7 @@ where
                     reply.ack, chunk
                 );
 
-                Err(RetryError::transient(Error::AckUmatchedError(
+                Err(RetryError::transient(Error::AckUmatched(
                     reply.ack,
                     chunk.to_string(),
                 )))

@@ -78,11 +78,11 @@ impl Client for WorkerPool {
         }
 
         let mut buf = Vec::new();
-        rencode::write_named(&mut buf, a).map_err(|e| Error::DeriveError(e.to_string()))?;
+        rencode::write_named(&mut buf, a).map_err(|e| Error::Derive(e.to_string()))?;
 
         self.sender
             .send(Message::Queuing(tag, timestamp, buf))
-            .map_err(|e| Error::SendError(e.to_string()))?;
+            .map_err(|e| Error::Send(e.to_string()))?;
         Ok(())
     }
 
@@ -98,7 +98,7 @@ impl Client for WorkerPool {
         self.sender.send(Message::Terminating(sender)).unwrap();
         receiver
             .recv()
-            .map_err(|e| Error::TerminateError(e.to_string()))?;
+            .map_err(|e| Error::Terminate(e.to_string()))?;
 
         Ok(())
     }
