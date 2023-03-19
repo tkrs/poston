@@ -1,6 +1,6 @@
 name: CI
 
-on: 
+on:
   push:
     branches: [master]
   pull_request:
@@ -22,13 +22,13 @@ jobs:
         ports:
           - 24224:24224
     steps:
-      - uses: actions/checkout@master
+      - uses: actions/checkout@v3
       - name: Install ${{ matrix.version }}
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@v1
         with:
-          toolchain: ${{ matrix.version }}-x86_64-unknown-linux-gnu
+          toolchain: ${{ matrix.version }}
+          target: x86_64-unknown-linux-gnu
           components: rustfmt
-          override: true
       - name: Install sccache
         env:
           SCCACHE_LINK: https://github.com/mozilla/sccache/releases/download
@@ -38,39 +38,19 @@ jobs:
           curl -L "$SCCACHE_LINK/$SCCACHE_VERSION/sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl.tar.gz" | tar xz
           echo "$PWD/sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl/" >> $GITHUB_PATH
           echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-      - name: Cargo fmt
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: -- --color=always --check
-      - name: Cargo check
-        uses: actions-rs/cargo@v1
-        with:
-          command: check
-          args: --tests --workspace --verbose
-      - name: Cargo test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --workspace --no-fail-fast -- --nocapture
-      - name: Cargo build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --workspace --verbose
+      - run: cargo fmt -- --color=always --check
+      - run: cargo check --tests --workspace --verbose
+      - run: cargo test --workspace --no-fail-fast -- --nocapture
+      - run: cargo build --workspace --verbose
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@master
+      - uses: actions/checkout@v3
       - name: Install toolchain and components
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@v1
         with:
-          toolchain: stable-x86_64-unknown-linux-gnu
+          toolchain: stable
+          target: x86_64-unknown-linux-gnu
           components: clippy
-          override: true
-      - name: Cargo clippy
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --workspace --verbose
+      - run: cargo clippy --workspace --verbose
