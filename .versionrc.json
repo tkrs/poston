@@ -1,0 +1,14 @@
+{
+  "types": [
+    { "type": "feat", "section": "Feature" },
+    { "type": "build", "section": "Build" },
+    { "type": "ci", "section": "CI/CD" },
+    { "type": "fix", "section": "Bug Fixes" },
+    { "type": "chore", "section": "Maintenance" },
+    { "type": "docs", "section": "Documentation" },
+    { "type": "refactor", "section": "Refactor" },
+    { "type": "perf", "section": "Performance Improvement" },
+    { "type": "style", "hidden": true },
+    { "type": "test", "hidden": true }
+  ]
+}
