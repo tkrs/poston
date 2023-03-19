@@ -63,6 +63,7 @@ jobs:
         uses: actions-rs/tarpaulin@v0.1
         with:
           args: --ignore-tests
+          version: 0.25.1
       - name: Upload to Codecov
         if: matrix.version == 'stable'
         uses: codecov/codecov-action@v3.1.1
