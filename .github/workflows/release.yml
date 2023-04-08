@@ -17,10 +17,10 @@ jobs:
           git config user.email "type.in.type@gmail.com"
           git config user.name "Takeru Sato"
       - name: Install rust toolchain stable
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@v1
         with:
-          toolchain: stable-x86_64-unknown-linux-gnu
-          override: true
+          toolchain: stable
+          target: x86_64-unknown-linux-gnu
       - name: Setup Node.js
         uses: actions/setup-node@v3
       - run: sudo npm install -g standard-version
