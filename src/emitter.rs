@@ -38,7 +38,7 @@ impl Emitter {
         let mut entries = Vec::with_capacity(cmp::min(qlen, size.unwrap_or(qlen)));
         queue.take(&mut entries);
 
-        let chunk = general_purpose::STANDARD.encode(Uuid::new_v4());
+        let chunk = general_purpose::STANDARD.encode(&Uuid::new_v4().to_string());
 
         let mut buf = Vec::new();
         buffer::pack_record(
