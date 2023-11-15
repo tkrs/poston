@@ -137,4 +137,47 @@ mod test {
 
         assert_eq!(q.len(), 2);
     }
+
+    #[test]
+    fn emit_valid_chunks() {
+        struct Mock {
+            acc: RefCell<Vec<(Vec<u8>, String)>>,
+        }
+
+        impl Mock {
+            pub fn new() -> Mock {
+                Mock {
+                    acc: RefCell::new(Vec::new()),
+                }
+            }
+        }
+
+        impl WriteRead for Mock {
+            fn write_and_read(&mut self, buf: &[u8], chunk: &str) -> Result<(), Error> {
+                let mut acc = self.acc.borrow_mut();
+                let args = (buf.to_vec(), chunk.to_string());
+                acc.push(args);
+                Ok(())
+            }
+        }
+
+        let emitter = Emitter::new("x".to_string());
+
+        for i in 1..1000 {
+            emitter.push((SystemTime::now(), vec![0x00, (i as u8).into()]));
+        }
+
+        let rw = &mut Mock::new();
+        emitter.emit(rw, Some(2)).unwrap();
+
+        let acc = rw.acc.borrow();
+        let chunks = acc
+            .iter()
+            .map(|(_, v)| general_purpose::STANDARD.decode(v).unwrap())
+            .collect::<Vec<Vec<u8>>>();
+
+        for chunk in chunks.iter() {
+            let _ = Uuid::parse_str(&String::from_utf8(chunk.clone()).unwrap()).unwrap();
+        }
+    }
 }
