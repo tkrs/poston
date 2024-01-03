@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Install rust toolchain stable
         uses: dtolnay/rust-toolchain@v1
         with:
@@ -18,10 +20,14 @@ jobs:
       - name: Generate release context
         id: release_context
         run: |
-          tag="$(git describe HEAD --abbrev=0)"
+          tag="$(git describe HEAD --abbrev=0 --tags)"
           echo "tag_name=$tag" >>$GITHUB_OUTPUT
-          echo "version=${tag/v/}" >>$GITHUB_OUTPUT
-          git log --pretty=format:'%b' --no-merges -1 >RELEASE_BODY.md
+      - name: Download artifact
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: pr.yml
+          workflow_conclusion: success
+          name: "release-note-${{ steps.release_context.outputs.tag_name }}"
       - run: cargo publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
