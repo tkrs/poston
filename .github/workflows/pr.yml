@@ -44,6 +44,7 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v5
         with:
-          commit-message: "chore(release): ${{ steps.release_context.outputs.tag_name }}"
-          branch: "release/${{ steps.release_context.outputs.tag_name }}"
+          title: "Release ${{ steps.release_context.outputs.tag_name }}"
           body-path: RELEASE_BODY.md
+          branch: "release/${{ steps.release_context.outputs.tag_name }}"
+          commit-message: "chore(release): ${{ steps.release_context.outputs.tag_name }}"
