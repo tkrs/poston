@@ -48,3 +48,8 @@ jobs:
           body-path: RELEASE_BODY.md
           branch: "release/${{ steps.release_context.outputs.tag_name }}"
           commit-message: "chore(release): ${{ steps.release_context.outputs.tag_name }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: "release-note-${{ steps.release_context.outputs.tag_name }}"
+          path: RELEASE_BODY.md
+          retention-days: 1

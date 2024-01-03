@@ -8,7 +8,7 @@ jobs:
   create-tag:
     environment: crates-io
     runs-on: ubuntu-latest
-    if: ${{ startsWith(github.event.head_commit.message, 'chore(release):') }}
+    if: ${{ startsWith(github.event.commits[0].message, 'chore(release):') }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -21,7 +21,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
       - run: sudo npm install -g standard-version
-      - name: Determine tag and generate release body
+      - name: Create tag
         run: standard-version --skip.changelog --skip.commit
       - name: Publish tag
         run: git push --follow-tags
