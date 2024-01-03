@@ -7,6 +7,9 @@ on:
 
 jobs:
   build_and_test:
+    name: Test and Build - ${{ matrix.version }}
+    runs-on: ubuntu-latest
+    if: ${{ ! startsWith(github.event.head_commit.message, 'chore(release):') }}
     strategy:
       fail-fast: false
       matrix:
@@ -14,8 +17,6 @@ jobs:
           - 1.61.0
           - stable
           - nightly
-    name: Test and Build - ${{ matrix.version }}
-    runs-on: ubuntu-latest
     services:
       fluentd:
         image: fluentd
@@ -43,6 +44,7 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    if: ${{ ! startsWith(github.event.head_commit.message, 'chore(release):') }}
     steps:
       - uses: actions/checkout@v4
       - name: Install toolchain and components
