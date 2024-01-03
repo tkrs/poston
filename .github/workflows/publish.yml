@@ -1,0 +1,33 @@
+name: Publish to crate.io
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  publish-crate:
+    environment: crates-io
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install rust toolchain stable
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: x86_64-unknown-linux-gnu
+      - name: Generate release context
+        id: release_context
+        run: |
+          tag="$(git describe HEAD --abbrev=0)"
+          echo "tag_name=$tag" >>$GITHUB_OUTPUT
+          echo "version=${tag/v/}" >>$GITHUB_OUTPUT
+          git log --pretty=format:'%b' --no-merges -1 >RELEASE_BODY.md
+      - run: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      - name: Create release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release ${{ steps.release_context.outputs.tag_name }}
+          tag_name: ${{ steps.release_context.outputs.tag_name }}
+          body_path: RELEASE_BODY.md
