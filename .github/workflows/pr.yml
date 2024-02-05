@@ -42,7 +42,7 @@ jobs:
       - run: cargo release ${{ steps.release_context.outputs.version }} --execute --no-confirm --no-tag --no-push --no-publish
       - run: git reset --soft HEAD^
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v5
+        uses: peter-evans/create-pull-request@v6
         with:
           title: "Release ${{ steps.release_context.outputs.tag_name }}"
           body-path: RELEASE_BODY.md
