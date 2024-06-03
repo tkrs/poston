@@ -23,7 +23,7 @@ jobs:
           tag="$(git describe HEAD --abbrev=0 --tags)"
           echo "tag_name=$tag" >>$GITHUB_OUTPUT
       - name: Download artifact
-        uses: dawidd6/action-download-artifact@v3
+        uses: dawidd6/action-download-artifact@v4
         with:
           workflow: pr.yml
           workflow_conclusion: success
