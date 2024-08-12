@@ -129,13 +129,7 @@ mod tests {
             ..Default::default()
         };
         let (_, receiver) = unbounded();
-        let ret = Worker::create(
-            addr.clone(),
-            settings,
-            receiver,
-            Duration::from_millis(1),
-            1,
-        );
+        let ret = Worker::create(addr, settings, receiver, Duration::from_millis(1), 1);
         assert!(ret.is_err())
     }
 
