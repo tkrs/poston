@@ -235,8 +235,12 @@ impl Connect<TcpStream> for TcpStream {
     {
         TcpStream::connect(addr).map(|s| {
             s.set_nodelay(true).unwrap();
-            s.set_read_timeout(Some(settings.read_timeout)).unwrap();
-            s.set_write_timeout(Some(settings.write_timeout)).unwrap();
+            if !settings.read_timeout.is_zero() {
+                s.set_read_timeout(Some(settings.read_timeout)).unwrap();
+            }
+            if !settings.write_timeout.is_zero() {
+                s.set_write_timeout(Some(settings.write_timeout)).unwrap();
+            }
             s
         })
     }

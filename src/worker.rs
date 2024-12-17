@@ -8,6 +8,7 @@ use std::net::{TcpStream, ToSocketAddrs};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
+#[derive(Debug)]
 pub struct Worker {
     handler: Option<thread::JoinHandle<()>>,
 }
@@ -121,7 +122,7 @@ mod tests {
 
     #[test]
     fn worker_create_should_return_err_when_the_connection_open_is_failed() {
-        let addr = "127.0.0.1:25";
+        let addr = "127.0.0.1:9";
         let settings = ConnectionSettings {
             connect_retry_initial_delay: Duration::new(0, 1),
             connect_retry_max_delay: Duration::new(0, 1),
@@ -130,7 +131,7 @@ mod tests {
         };
         let (_, receiver) = unbounded();
         let ret = Worker::create(addr, settings, receiver, Duration::from_millis(1), 1);
-        assert!(ret.is_err())
+        assert!(ret.is_err(), "got: {:?}", ret)
     }
 
     struct Q;
