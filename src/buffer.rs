@@ -1,11 +1,25 @@
-use crate::error::Error;
+use crate::rmps::decode as rdecode;
 use crate::rmps::encode as rencode;
 use crate::rmps::Deserializer;
 use crate::time_pack::TimePack;
 use rmp::encode;
 use serde::Deserialize;
+use serde::Serialize;
 use std::collections::VecDeque;
 use std::time::SystemTime;
+use thiserror::Error;
+
+pub trait Buffer<T> {
+    fn pack(&self) -> Result<Vec<u8>, BufferError>;
+}
+
+impl<T: Serialize> Buffer<T> for T {
+    fn pack(&self) -> Result<Vec<u8>, BufferError> {
+        let mut buf = Vec::new();
+        rencode::write_named(&mut buf, self).map_err(BufferError::Pack)?;
+        Ok(buf)
+    }
+}
 
 pub trait Take<T> {
     fn take(&mut self, buf: &mut Vec<T>);
@@ -34,31 +48,70 @@ pub struct AckReply {
     pub ack: String,
 }
 
-pub fn pack_record<'a>(
+impl TryFrom<&[u8]> for AckReply {
+    type Error = BufferError;
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        unpack_response(value, value.len())
+    }
+}
+
+pub struct Record<'a> {
+    tag: &'a str,
+    entries: &'a [(SystemTime, Vec<u8>)],
+    chunk: &'a str,
+}
+
+impl<'a> Record<'a> {
+    pub fn new(tag: &'a str, entries: &'a [(SystemTime, Vec<u8>)], chunk: &'a str) -> Self {
+        Self {
+            tag,
+            entries,
+            chunk,
+        }
+    }
+
+    pub fn pack(&self) -> Result<Vec<u8>, BufferError> {
+        let mut buf = Vec::new();
+        pack_record(&mut buf, self.tag, self.entries, self.chunk)?;
+        Ok(buf)
+    }
+}
+
+fn pack_record<'a>(
     buf: &mut Vec<u8>,
     tag: &'a str,
     entries: &'a [(SystemTime, Vec<u8>)],
     chunk: &'a str,
-) -> Result<(), Error> {
+) -> Result<(), BufferError> {
     buf.push(0x93);
-    encode::write_str(buf, tag).map_err(|e| Error::Derive(e.to_string()))?;
-    encode::write_array_len(buf, entries.len() as u32).map_err(|e| Error::Derive(e.to_string()))?;
+    encode::write_str(buf, tag)
+        .map_err(|e| BufferError::Pack(rencode::Error::InvalidValueWrite(e)))?;
+    encode::write_array_len(buf, entries.len() as u32)
+        .map_err(|e| BufferError::Pack(rencode::Error::InvalidValueWrite(e)))?;
     for (t, entry) in entries {
         buf.push(0x92);
         t.write_time(buf)
-            .map_err(|e| Error::Derive(e.to_string()))?;
+            .map_err(|e| BufferError::Pack(rencode::Error::InvalidValueWrite(e)))?;
         buf.extend(entry.iter());
     }
     let options = Options {
         chunk: chunk.to_string(),
     };
 
-    rencode::write_named(buf, &options).map_err(|e| Error::Derive(e.to_string()))
+    rencode::write_named(buf, &options).map_err(BufferError::Pack)
 }
 
-pub fn unpack_response(resp_buf: &[u8], size: usize) -> Result<AckReply, Error> {
+fn unpack_response(resp_buf: &[u8], size: usize) -> Result<AckReply, BufferError> {
     let mut de = Deserializer::new(&resp_buf[0..size]);
-    Deserialize::deserialize(&mut de).map_err(|e| Error::Derive(e.to_string()))
+    Deserialize::deserialize(&mut de).map_err(BufferError::Unpack)
+}
+
+#[derive(Error, Debug)]
+pub enum BufferError {
+    #[error("pack failed")]
+    Pack(#[from] rencode::Error),
+    #[error("unpack failed")]
+    Unpack(#[from] rdecode::Error),
 }
 
 #[cfg(test)]
@@ -149,7 +202,7 @@ mod unpack_response {
     #[test]
     fn it_should_unpack_as_ack_reply() {
         let mut resp_buf = [0u8; 64];
-        for (i, e) in vec![0x81u8, 0xa3, 0x61, 0x63, 0x6b, 0xa4, 0x61, 0x62, 0x63, 0x3d]
+        for (i, e) in [0x81u8, 0xa3, 0x61, 0x63, 0x6b, 0xa4, 0x61, 0x62, 0x63, 0x3d]
             .iter()
             .enumerate()
         {

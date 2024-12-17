@@ -146,13 +146,13 @@ mod tests {
     #[test]
     fn test_handle_message_queued() {
         let msg = Message::Queuing("tag".into(), SystemTime::now(), vec![1, 2, 4]);
-        let mut now = Instant::now();
+        let now = Instant::now();
         let flush_period = Duration::from_secs(100);
         let flush_size = 2;
         let mut queue = Q;
 
         assert_eq!(
-            handle_message(msg, &mut now, flush_period, flush_size, &mut queue),
+            handle_message(msg, &now, flush_period, flush_size, &mut queue),
             HandleResult::Queued
         );
     }
@@ -165,7 +165,7 @@ mod tests {
         assert_eq!(
             handle_message(
                 Message::Queuing("tag".into(), SystemTime::now(), vec![1, 2, 4]),
-                &mut (now - flush_period),
+                &(now - flush_period),
                 flush_period,
                 1,
                 &mut Q
@@ -180,7 +180,7 @@ mod tests {
         assert_eq!(
             handle_message(
                 Message::Terminating(sender),
-                &mut Instant::now(),
+                &Instant::now(),
                 Duration::from_nanos(1),
                 1,
                 &mut Q
@@ -192,7 +192,7 @@ mod tests {
 
     struct WR;
     impl WriteRead for WR {
-        fn write_and_read(&mut self, _buf: &[u8], _chunk: &str) -> Result<(), crate::error::Error> {
+        fn write_and_read(&mut self, _buf: &[u8], _chunk: &str) -> Result<(), StreamError> {
             Ok(())
         }
     }
