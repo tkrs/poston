@@ -4,7 +4,6 @@ extern crate serde_derive;
 use log::info;
 use once_cell::sync::Lazy;
 use poston::{Client, Settings, WorkerPool};
-use pretty_env_logger;
 use rand::prelude::*;
 use rand::{self, distributions::Alphanumeric};
 use std::time::{Duration, Instant, SystemTime};

@@ -1,6 +1,5 @@
-use crate::buffer::{self, Take};
+use crate::buffer::{BufferError, Record, Take};
 use crate::connect::*;
-use crate::error::Error;
 use base64::{engine::general_purpose, Engine as _};
 use std::cell::RefCell;
 use std::cmp;
@@ -29,7 +28,11 @@ impl Emitter {
         q.push_back(elem)
     }
 
-    pub fn emit<RW: WriteRead>(&self, rw: &mut RW, size: Option<usize>) -> Result<(), Error> {
+    pub fn emit<RW: WriteRead>(
+        &self,
+        rw: &mut RW,
+        size: Option<usize>,
+    ) -> Result<(), EmitterError> {
         let mut queue = self.queue.borrow_mut();
         if queue.is_empty() {
             return Ok(());
@@ -38,17 +41,20 @@ impl Emitter {
         let mut entries = Vec::with_capacity(cmp::min(qlen, size.unwrap_or(qlen)));
         queue.take(&mut entries);
 
-        let chunk = general_purpose::STANDARD.encode(&Uuid::new_v4().to_string());
-
-        let mut buf = Vec::new();
-        buffer::pack_record(
-            &mut buf,
-            self.tag.as_str(),
-            entries.as_slice(),
-            chunk.as_str(),
-        )?;
+        let chunk = general_purpose::STANDARD.encode(Uuid::new_v4().to_string());
+        let rec = Record::new(&self.tag, entries.as_slice(), &chunk);
+        let buf = rec.pack().map_err(EmitterError::Buffer)?;
         rw.write_and_read(&buf, &chunk)
+            .map_err(EmitterError::Stream)
     }
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum EmitterError {
+    #[error("buffer error")]
+    Buffer(#[from] BufferError),
+    #[error("stream error")]
+    Stream(#[from] StreamError),
 }
 
 #[cfg(test)]
@@ -58,7 +64,7 @@ mod test {
     struct TestStream;
 
     impl WriteRead for TestStream {
-        fn write_and_read(&mut self, _buf: &[u8], _chunk: &str) -> Result<(), Error> {
+        fn write_and_read(&mut self, _buf: &[u8], _chunk: &str) -> Result<(), StreamError> {
             Ok(())
         }
     }
@@ -117,8 +123,8 @@ mod test {
     struct TestErrStream;
 
     impl WriteRead for TestErrStream {
-        fn write_and_read(&mut self, _buf: &[u8], _chunk: &str) -> Result<(), Error> {
-            Err(Error::AckUmatched("a".to_string(), "b".to_string()))
+        fn write_and_read(&mut self, _buf: &[u8], _chunk: &str) -> Result<(), StreamError> {
+            Err(StreamError::AckUmatched("a".to_string(), "b".to_string()))
         }
     }
 
@@ -153,7 +159,7 @@ mod test {
         }
 
         impl WriteRead for Mock {
-            fn write_and_read(&mut self, buf: &[u8], chunk: &str) -> Result<(), Error> {
+            fn write_and_read(&mut self, buf: &[u8], chunk: &str) -> Result<(), StreamError> {
                 let mut acc = self.acc.borrow_mut();
                 let args = (buf.to_vec(), chunk.to_string());
                 acc.push(args);
@@ -164,7 +170,7 @@ mod test {
         let emitter = Emitter::new("x".to_string());
 
         for i in 1..1000 {
-            emitter.push((SystemTime::now(), vec![0x00, (i as u8).into()]));
+            emitter.push((SystemTime::now(), vec![0x00, (i as u8)]));
         }
 
         let rw = &mut Mock::new();

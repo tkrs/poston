@@ -1,5 +1,4 @@
-use crate::buffer;
-use crate::error::Error;
+use crate::buffer::{AckReply, BufferError};
 use backoff::{Error as RetryError, ExponentialBackoff};
 use std::cell::RefCell;
 use std::fmt::Debug;
@@ -20,7 +19,7 @@ pub trait Reconnect {
 }
 
 pub trait WriteRead {
-    fn write_and_read(&mut self, buf: &[u8], chunk: &str) -> Result<(), Error>;
+    fn write_and_read(&mut self, buf: &[u8], chunk: &str) -> Result<(), StreamError>;
 }
 
 #[derive(Debug)]
@@ -137,7 +136,7 @@ where
     A: ToSocketAddrs + Clone + Debug,
     S: Connect<S> + Read + Write,
 {
-    fn write_and_read(&mut self, buf: &[u8], chunk: &str) -> Result<(), Error> {
+    fn write_and_read(&mut self, buf: &[u8], chunk: &str) -> Result<(), StreamError> {
         let backoff = ExponentialBackoff {
             current_interval: self.write_retry_initial_delay(),
             initial_interval: self.write_retry_initial_delay(),
@@ -149,7 +148,7 @@ where
         let op = || {
             if self.should_reconnect() {
                 self.reconnect()
-                    .map_err(|e| RetryError::transient(Error::Network(e.to_string())))?;
+                    .map_err(|e| RetryError::transient(StreamError::Network(e)))?;
             }
             self.write_all(buf)
                 .and_then(|_| self.flush())
@@ -158,7 +157,7 @@ where
                     if let Err(err) = self.close() {
                         debug!("Failed to close the stream, cause: {:?}", err);
                     }
-                    RetryError::transient(Error::Network(e.to_string()))
+                    RetryError::transient(StreamError::Network(e))
                 })?;
 
             let read_backoff = ExponentialBackoff {
@@ -176,17 +175,15 @@ where
                     debug!("Failed to read response, chunk: {}, cause: {:?}", chunk, e);
                     use io::ErrorKind::*;
                     match e.kind() {
-                        WouldBlock | TimedOut => {
-                            RetryError::transient(Error::Network(e.to_string()))
-                        }
+                        WouldBlock | TimedOut => RetryError::transient(StreamError::Network(e)),
                         UnexpectedEof | BrokenPipe | ConnectionAborted | ConnectionRefused
                         | ConnectionReset => {
                             if let Err(err) = self.close() {
                                 debug!("Failed to close the stream, cause: {:?}", err);
                             }
-                            RetryError::permanent(Error::Network(e.to_string()))
+                            RetryError::permanent(StreamError::Network(e))
                         }
-                        _ => RetryError::Permanent(Error::Network(e.to_string())),
+                        _ => RetryError::Permanent(StreamError::Network(e)),
                     }
                 })
             };
@@ -205,7 +202,8 @@ where
                 }
             })?;
 
-            let reply = buffer::unpack_response(&resp_buf, resp_buf.len())
+            let reply = AckReply::try_from(resp_buf.as_ref())
+                .map_err(StreamError::Buffer)
                 .map_err(RetryError::transient)?;
             if reply.ack == chunk {
                 Ok(())
@@ -215,7 +213,7 @@ where
                     reply.ack, chunk
                 );
 
-                Err(RetryError::transient(Error::AckUmatched(
+                Err(RetryError::transient(StreamError::AckUmatched(
                     reply.ack,
                     chunk.to_string(),
                 )))
@@ -233,7 +231,7 @@ impl Connect<TcpStream> for TcpStream {
     where
         A: ToSocketAddrs + Clone + Debug,
     {
-        TcpStream::connect(addr).map(|s| {
+        TcpStream::connect(addr).inspect(|s| {
             s.set_nodelay(true).unwrap();
             if !settings.read_timeout.is_zero() {
                 s.set_read_timeout(Some(settings.read_timeout)).unwrap();
@@ -241,7 +239,6 @@ impl Connect<TcpStream> for TcpStream {
             if !settings.write_timeout.is_zero() {
                 s.set_write_timeout(Some(settings.write_timeout)).unwrap();
             }
-            s
         })
     }
 
@@ -280,6 +277,16 @@ where
     })
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum StreamError {
+    #[error("network error")]
+    Network(#[from] std::io::Error),
+    #[error("buffer error")]
+    Buffer(#[from] BufferError),
+    #[error("request chunk and response ack-id did not match, {0} /= {1}")]
+    AckUmatched(String, String),
+}
+
 #[cfg(test)]
 mod tests {
     use super::{io, Duration, ToSocketAddrs};
@@ -304,7 +311,7 @@ mod tests {
             where
                 A: ToSocketAddrs + Clone,
             {
-                if let Ok(_) = addr.to_socket_addrs() {
+                if addr.to_socket_addrs().is_ok() {
                     let count = CONN_COUNT.fetch_add(1, Ordering::SeqCst);
                     if count % 20 == 0 {
                         Ok(TestStream(AtomicUsize::new(1)))
@@ -383,6 +390,7 @@ mod tests {
 
         #[derive(Debug)]
         struct TS;
+        #[allow(clippy::type_complexity)]
         static QUEUE: Lazy<Mutex<RefCell<VecDeque<Result<usize, io::Error>>>>> = Lazy::new(|| {
             let mut q = VecDeque::new();
 

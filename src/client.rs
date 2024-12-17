@@ -1,6 +1,6 @@
+use crate::buffer::Buffer;
 use crate::connect;
-use crate::error::Error;
-use crate::rmps::encode as rencode;
+use crate::error::ClientError;
 use crate::worker::{Message, Worker};
 use crossbeam_channel::{bounded, unbounded, Sender};
 use serde::Serialize;
@@ -11,10 +11,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime};
 
 pub trait Client {
-    fn send<A>(&self, tag: String, a: &A, timestamp: SystemTime) -> Result<(), Error>
+    fn send<A>(&self, tag: String, a: &A, timestamp: SystemTime) -> Result<(), ClientError>
     where
         A: Serialize;
-    fn terminate(&self) -> Result<(), Error>;
+    fn terminate(&self) -> Result<(), ClientError>;
 }
 
 pub struct WorkerPool {
@@ -68,25 +68,25 @@ impl WorkerPool {
 }
 
 impl Client for WorkerPool {
-    fn send<A>(&self, tag: String, a: &A, timestamp: SystemTime) -> Result<(), Error>
+    fn send<A>(&self, tag: String, a: &A, timestamp: SystemTime) -> Result<(), ClientError>
     where
         A: Serialize,
+        A: Buffer<A>,
     {
         if self.terminated.load(Ordering::Acquire) {
             debug!("Worker does already closed.");
             return Ok(());
         }
 
-        let mut buf = Vec::new();
-        rencode::write_named(&mut buf, a).map_err(|e| Error::Derive(e.to_string()))?;
+        let buf = a.pack().map_err(ClientError::Buffer)?;
 
         self.sender
             .send(Message::Queuing(tag, timestamp, buf))
-            .map_err(|e| Error::Send(e.to_string()))?;
+            .map_err(ClientError::SendChannel)?;
         Ok(())
     }
 
-    fn terminate(&self) -> Result<(), Error> {
+    fn terminate(&self) -> Result<(), ClientError> {
         if self.terminated.fetch_or(true, Ordering::SeqCst) {
             info!("Worker does already terminated.");
             return Ok(());
@@ -96,9 +96,7 @@ impl Client for WorkerPool {
 
         let (sender, receiver) = bounded::<()>(0);
         self.sender.send(Message::Terminating(sender)).unwrap();
-        receiver
-            .recv()
-            .map_err(|e| Error::Terminate(e.to_string()))?;
+        receiver.recv().map_err(ClientError::RecieveChannel)?;
 
         Ok(())
     }

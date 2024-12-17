@@ -56,13 +56,12 @@ pub enum HandleResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::error::Error;
 
     #[test]
     fn test_push_flush() {
         struct W;
         impl WriteRead for W {
-            fn write_and_read(&mut self, _buf: &[u8], _chunk: &str) -> Result<(), Error> {
+            fn write_and_read(&mut self, _buf: &[u8], _chunk: &str) -> Result<(), StreamError> {
                 Ok(())
             }
         }
@@ -75,24 +74,24 @@ mod tests {
 
         let now = SystemTime::now();
 
-        queue.push("a".to_string(), now.clone(), vec![0u8, 9u8]);
-        queue.push("b".to_string(), now.clone(), vec![1u8, 8u8]);
-        queue.push("a".to_string(), now.clone(), vec![2u8, 7u8]);
-        queue.push("b".to_string(), now.clone(), vec![3u8, 6u8]);
-        queue.push("c".to_string(), now.clone(), vec![4u8, 5u8]);
+        queue.push("a".to_string(), now, vec![0u8, 9u8]);
+        queue.push("b".to_string(), now, vec![1u8, 8u8]);
+        queue.push("a".to_string(), now, vec![2u8, 7u8]);
+        queue.push("b".to_string(), now, vec![3u8, 6u8]);
+        queue.push("c".to_string(), now, vec![4u8, 5u8]);
 
         let expected = Emitter::new("a".to_string());
-        expected.push((now.clone(), vec![0u8, 9u8]));
-        expected.push((now.clone(), vec![2u8, 7u8]));
+        expected.push((now, vec![0u8, 9u8]));
+        expected.push((now, vec![2u8, 7u8]));
         assert_eq!(queue.emitters().get("a").unwrap(), &expected);
 
         let expected = Emitter::new("b".to_string());
-        expected.push((now.clone(), vec![1u8, 8u8]));
-        expected.push((now.clone(), vec![3u8, 6u8]));
+        expected.push((now, vec![1u8, 8u8]));
+        expected.push((now, vec![3u8, 6u8]));
         assert_eq!(queue.emitters().get("b").unwrap(), &expected);
 
         let expected = Emitter::new("c".to_string());
-        expected.push((now.clone(), vec![4u8, 5u8]));
+        expected.push((now, vec![4u8, 5u8]));
         assert_eq!(queue.emitters().get("c").unwrap(), &expected);
 
         assert_eq!(queue.len(), 5);
