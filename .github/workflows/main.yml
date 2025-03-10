@@ -31,7 +31,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-directories: ~/.cache/sccache
-      - uses: mozilla-actions/sccache-action@v0.0.7
+      - uses: mozilla-actions/sccache-action@v0.0.8
       - run: |
           echo "SCCACHE_GHA_ENABLED=true" >>$GITHUB_ENV
           echo "RUSTC_WRAPPER=sccache" >>$GITHUB_ENV
