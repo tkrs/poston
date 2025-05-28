@@ -1,7 +1,6 @@
 use crate::connect::*;
 use crate::queue::*;
 use crossbeam_channel::{Receiver, Sender};
-use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io;
 use std::net::{TcpStream, ToSocketAddrs};
@@ -20,6 +19,7 @@ impl Worker {
         receiver: Receiver<Message>,
         flush_period: Duration,
         flush_size: usize,
+        does_recover: bool,
     ) -> io::Result<Self>
     where
         A: ToSocketAddrs + Clone + Debug + Send + 'static,
@@ -27,7 +27,13 @@ impl Worker {
         let mut stream: Stream<A, TcpStream> = Stream::connect(addr, conn_settings)?;
         let thread_builder = thread::Builder::new().name("fluent-worker-pool".to_owned());
         let handler = thread_builder.spawn(move || {
-            start_worker(&mut stream, receiver, flush_period, flush_size);
+            start_worker(
+                &mut stream,
+                receiver,
+                flush_period,
+                flush_size,
+                does_recover,
+            );
             stream
                 .close()
                 .unwrap_or_else(|e| panic!("Failed to shutdown the stream: {:?}", e));
@@ -55,12 +61,9 @@ fn start_worker<S: WriteRead>(
     receiver: Receiver<Message>,
     flush_period: Duration,
     flush_size: usize,
+    does_recover: bool,
 ) {
-    let emitters = HashMap::new();
-    let mut queue = QueueHandler {
-        emitters,
-        flusher: stream,
-    };
+    let mut queue = QueueHandler::new(stream, does_recover);
     let mut now = Instant::now();
 
     loop {
@@ -130,7 +133,7 @@ mod tests {
             ..Default::default()
         };
         let (_, receiver) = unbounded();
-        let ret = Worker::create(addr, settings, receiver, Duration::from_millis(1), 1);
+        let ret = Worker::create(addr, settings, receiver, Duration::from_millis(1), 1, true);
         assert!(ret.is_err(), "got: {:?}", ret)
     }
 
@@ -202,7 +205,7 @@ mod tests {
         let (sender, receiver) = unbounded();
         let (sender2, receiver2) = bounded::<()>(1);
 
-        thread::spawn(move || start_worker(WR, receiver, Duration::from_nanos(1), 1));
+        thread::spawn(move || start_worker(WR, receiver, Duration::from_nanos(1), 1, true));
         sender.send(Message::Terminating(sender2)).unwrap();
 
         receiver2.recv_timeout(Duration::from_millis(100)).unwrap();
