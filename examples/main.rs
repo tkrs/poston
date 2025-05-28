@@ -2,10 +2,10 @@
 extern crate serde_derive;
 
 use log::info;
-use once_cell::sync::Lazy;
 use poston::{Client, Settings, WorkerPool};
 use rand::prelude::*;
 use rand::{self, distr::Alphanumeric};
+use std::sync::LazyLock;
 use std::time::{Duration, Instant, SystemTime};
 use std::{iter, thread};
 
@@ -15,7 +15,7 @@ struct Human {
     name: String,
 }
 
-static POOL: Lazy<WorkerPool> = Lazy::new(|| {
+static POOL: LazyLock<WorkerPool> = LazyLock::new(|| {
     let addr = "127.0.0.1:24224".to_string();
     let settins = Settings {
         flush_period: Duration::from_millis(10),

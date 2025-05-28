@@ -291,11 +291,11 @@ pub enum StreamError {
 mod tests {
     use super::{io, Duration, ToSocketAddrs};
     use super::{Connect, ConnectionSettings, Reconnect, Stream};
-    use once_cell::sync::Lazy;
     use std::collections::VecDeque;
     use std::convert::From;
     use std::io::{Read, Write};
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::LazyLock;
     use std::sync::Mutex;
 
     #[derive(Debug)]
@@ -391,21 +391,22 @@ mod tests {
         #[derive(Debug)]
         struct TS;
         #[allow(clippy::type_complexity)]
-        static QUEUE: Lazy<Mutex<RefCell<VecDeque<Result<usize, io::Error>>>>> = Lazy::new(|| {
-            let mut q = VecDeque::new();
+        static QUEUE: LazyLock<Mutex<RefCell<VecDeque<Result<usize, io::Error>>>>> =
+            LazyLock::new(|| {
+                let mut q = VecDeque::new();
 
-            let scenario = vec![
-                Err(io::Error::from(io::ErrorKind::TimedOut)), // write ng.
-                Err(io::Error::from(io::ErrorKind::BrokenPipe)), // write ng.
-                Ok(1),                                         // write ok.
-                Err(io::Error::from(io::ErrorKind::WouldBlock)), // read ng.
-                Ok(55),                                        // read ok.
-            ];
-            for s in scenario {
-                q.push_back(s);
-            }
-            Mutex::new(RefCell::new(q))
-        });
+                let scenario = vec![
+                    Err(io::Error::from(io::ErrorKind::TimedOut)), // write ng.
+                    Err(io::Error::from(io::ErrorKind::BrokenPipe)), // write ng.
+                    Ok(1),                                         // write ok.
+                    Err(io::Error::from(io::ErrorKind::WouldBlock)), // read ng.
+                    Ok(55),                                        // read ok.
+                ];
+                for s in scenario {
+                    q.push_back(s);
+                }
+                Mutex::new(RefCell::new(q))
+            });
 
         impl Connect<TS> for TS {
             fn connect<A>(_addr: A, _s: ConnectionSettings) -> io::Result<TS>
