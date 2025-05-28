@@ -10,11 +10,20 @@ pub trait Queue {
 }
 
 pub struct QueueHandler<S: WriteRead> {
-    pub emitters: HashMap<String, Emitter>,
-    pub flusher: S,
+    emitters: HashMap<String, Emitter>,
+    flusher: S,
+    does_recover: bool,
 }
 
 impl<S: WriteRead> QueueHandler<S> {
+    pub fn new(flusher: S, does_recover: bool) -> Self {
+        Self {
+            emitters: HashMap::new(),
+            flusher,
+            does_recover,
+        }
+    }
+
     #[cfg(test)]
     fn emitters(&self) -> &HashMap<String, Emitter> {
         &self.emitters
@@ -32,11 +41,20 @@ impl<S: WriteRead> Queue for QueueHandler<S> {
 
     fn flush(&mut self, size: Option<usize>) {
         for (tag, emitter) in self.emitters.iter() {
-            if let Err(err) = emitter.emit(&mut self.flusher, size) {
-                error!(
-                    "Tag '{}' unexpected error occurred during emitting message, cause: '{:?}'",
-                    tag, err
-                );
+            if let Err(err) = emitter.emit(&mut self.flusher, size, self.does_recover) {
+                if self.does_recover {
+                    // If does_recover is true, we will not remove the emitter
+                    // from the map, so it can be retried later.
+                    warn!(
+                        "Tag '{}' error occurred during emitting messages; they will be retried on the next attempt. Cause: '{:?}'",
+                        tag, err
+                    );
+                } else {
+                    error!(
+                        "Tag '{}' error occurred during emitting messages; they will be discarded. Cause: '{:?}'",
+                        tag, err
+                    );
+                }
             }
         }
     }
@@ -68,7 +86,11 @@ mod tests {
         let emitters = HashMap::new();
         let flusher = W;
 
-        let mut queue = QueueHandler { emitters, flusher };
+        let mut queue = QueueHandler {
+            emitters,
+            flusher,
+            does_recover: true,
+        };
 
         assert!(queue.emitters().is_empty());
 

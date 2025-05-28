@@ -32,6 +32,7 @@ impl Emitter {
         &self,
         rw: &mut RW,
         size: Option<usize>,
+        does_recover: bool,
     ) -> Result<(), EmitterError> {
         let mut queue = self.queue.borrow_mut();
         if queue.is_empty() {
@@ -44,8 +45,12 @@ impl Emitter {
         let chunk = general_purpose::STANDARD.encode(Uuid::new_v4().to_string());
         let rec = Record::new(&self.tag, entries.as_slice(), &chunk);
         let buf = rec.pack().map_err(EmitterError::Buffer)?;
-        rw.write_and_read(&buf, &chunk)
-            .map_err(EmitterError::Stream)
+        rw.write_and_read(&buf, &chunk).map_err(|e| {
+            if does_recover {
+                queue.extend(entries);
+            }
+            EmitterError::Stream(e)
+        })
     }
 }
 
@@ -80,21 +85,21 @@ mod test {
         emitter.push((SystemTime::now(), vec![0x00, 0x05]));
 
         {
-            emitter.emit(&mut TestStream, Some(3)).unwrap();
+            emitter.emit(&mut TestStream, Some(3), true).unwrap();
             let q = emitter.queue.borrow_mut();
 
             assert_eq!(q.len(), 2);
         }
 
         {
-            emitter.emit(&mut TestStream, Some(3)).unwrap();
+            emitter.emit(&mut TestStream, Some(3), true).unwrap();
             let q = emitter.queue.borrow_mut();
 
             assert_eq!(q.len(), 0);
         }
 
         {
-            emitter.emit(&mut TestStream, Some(3)).unwrap();
+            emitter.emit(&mut TestStream, Some(3), true).unwrap();
             let q = emitter.queue.borrow_mut();
 
             assert_eq!(q.len(), 0);
@@ -113,7 +118,7 @@ mod test {
         }
 
         {
-            emitter.emit(&mut TestStream, None).unwrap();
+            emitter.emit(&mut TestStream, None, true).unwrap();
             let q = emitter.queue.borrow_mut();
 
             assert_eq!(q.len(), 0);
@@ -138,10 +143,26 @@ mod test {
         emitter.push((SystemTime::now(), vec![0x00, 0x04]));
         emitter.push((SystemTime::now(), vec![0x00, 0x05]));
 
-        assert!(emitter.emit(&mut TestErrStream, Some(3)).is_err());
+        assert!(emitter.emit(&mut TestErrStream, Some(3), false).is_err());
         let q = emitter.queue.borrow_mut();
 
         assert_eq!(q.len(), 2);
+    }
+
+    #[test]
+    fn emit_not_consume_queue_with_error_stream_if_does_recover_is_true() {
+        let emitter = Emitter::new("x".to_string());
+
+        emitter.push((SystemTime::now(), vec![0x00, 0x01]));
+        emitter.push((SystemTime::now(), vec![0x00, 0x02]));
+        emitter.push((SystemTime::now(), vec![0x00, 0x03]));
+        emitter.push((SystemTime::now(), vec![0x00, 0x04]));
+        emitter.push((SystemTime::now(), vec![0x00, 0x05]));
+
+        assert!(emitter.emit(&mut TestErrStream, Some(3), true).is_err());
+        let q = emitter.queue.borrow_mut();
+
+        assert_eq!(q.len(), 5);
     }
 
     #[test]
@@ -174,7 +195,7 @@ mod test {
         }
 
         let rw = &mut Mock::new();
-        emitter.emit(rw, Some(2)).unwrap();
+        emitter.emit(rw, Some(2), true).unwrap();
 
         let acc = rw.acc.borrow();
         let chunks = acc

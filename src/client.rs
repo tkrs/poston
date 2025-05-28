@@ -57,6 +57,7 @@ impl WorkerPool {
             receiver,
             settings.flush_period,
             settings.max_flush_entries,
+            settings.does_recover,
         )?;
 
         Ok(Self {
@@ -129,6 +130,8 @@ pub struct Settings {
     pub read_retry_initial_delay: Duration,
     pub read_retry_max_delay: Duration,
     pub read_retry_timeout: Duration,
+
+    pub does_recover: bool,
 }
 
 impl Default for Settings {
@@ -147,6 +150,7 @@ impl Default for Settings {
             read_retry_timeout: Duration::from_secs(10),
             write_timeout: Duration::from_secs(1),
             read_timeout: Duration::from_secs(1),
+            does_recover: false,
         }
     }
 }
