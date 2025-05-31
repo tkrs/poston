@@ -105,7 +105,7 @@ fn prepare_db() -> BTreeMap<u32, Member> {
             .map(char::from)
             .take(30)
             .collect();
-        let age: u32 = rng.gen_range(1..100);
+        let age: u32 = rng.random_range(1..100);
 
         db.insert(i, Member { age, name });
     }
