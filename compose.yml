@@ -1,0 +1,6 @@
+services:
+  fluentd:
+    image: "fluent/fluent-bit"
+    command: /fluent-bit/bin/fluent-bit -i forward -o stdout -p format=json_lines -f 1
+    ports:
+      - 24224:24224
