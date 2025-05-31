@@ -122,5 +122,5 @@ fn prepare_fluentd_client(addr: String) -> Result<WorkerPool, io::Error> {
         does_recover: true,
         ..Default::default()
     };
-    WorkerPool::with_settings(&addr, &settins)
+    WorkerPool::with_settings(&addr, &settings)
 }
