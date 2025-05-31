@@ -29,9 +29,10 @@ async fn member(
         .cloned()
         .ok_or_else(|| error::ErrorNotFound("Member not found"))?;
 
-    client
-        .send("customer".into(), &m, SystemTime::now())
-        .map_err(|e| error::ErrorInternalServerError(e.to_string()))?;
+    let sent = client.send("customer".into(), &m, SystemTime::now());
+    if let Err(err) = sent {
+        info!("Failed to send data to Fluentd: {}", err);
+    }
 
     Ok(Json(m))
 }
