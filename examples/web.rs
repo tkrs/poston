@@ -105,7 +105,7 @@ fn prepare_db() -> BTreeMap<u32, Member> {
             .map(char::from)
             .take(30)
             .collect();
-        let age: u32 = rng.random_range(1..100);
+        let age: u32 = rng.gen_range(1..100);
 
         db.insert(i, Member { age, name });
     }
@@ -113,7 +113,7 @@ fn prepare_db() -> BTreeMap<u32, Member> {
 }
 
 fn prepare_fluentd_client(addr: String) -> Result<WorkerPool, io::Error> {
-    let settins = Settings {
+    let settings = Settings {
         flush_period: Duration::from_secs(3),
         max_flush_entries: 200,
         connection_retry_timeout: Duration::from_secs(5),
