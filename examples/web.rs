@@ -27,7 +27,7 @@ async fn member(
     let m = db
         .get(&id)
         .cloned()
-        .ok_or_else(|| error::ErrorNotFound("Customer not found"))?;
+        .ok_or_else(|| error::ErrorNotFound("Member not found"))?;
 
     client
         .send("customer".into(), &m, SystemTime::now())
