@@ -40,11 +40,9 @@ impl<S: WriteRead> Queue for QueueHandler<S> {
     }
 
     fn flush(&mut self, size: Option<usize>) {
-        for (tag, emitter) in self.emitters.iter() {
+        for (tag, emitter) in self.emitters.iter_mut() {
             if let Err(err) = emitter.emit(&mut self.flusher, size, self.does_recover) {
                 if self.does_recover {
-                    // If does_recover is true, we will not remove the emitter
-                    // from the map, so it can be retried later.
                     warn!(
                         "Tag '{}' error occurred during emitting messages; they will be retried on the next attempt. Cause: '{:?}'",
                         tag, err
@@ -102,17 +100,17 @@ mod tests {
         queue.push("b".to_string(), now, vec![3u8, 6u8]);
         queue.push("c".to_string(), now, vec![4u8, 5u8]);
 
-        let expected = Emitter::new("a".to_string());
+        let mut expected = Emitter::new("a".to_string());
         expected.push((now, vec![0u8, 9u8]));
         expected.push((now, vec![2u8, 7u8]));
         assert_eq!(queue.emitters().get("a").unwrap(), &expected);
 
-        let expected = Emitter::new("b".to_string());
+        let mut expected = Emitter::new("b".to_string());
         expected.push((now, vec![1u8, 8u8]));
         expected.push((now, vec![3u8, 6u8]));
         assert_eq!(queue.emitters().get("b").unwrap(), &expected);
 
-        let expected = Emitter::new("c".to_string());
+        let mut expected = Emitter::new("c".to_string());
         expected.push((now, vec![4u8, 5u8]));
         assert_eq!(queue.emitters().get("c").unwrap(), &expected);
 

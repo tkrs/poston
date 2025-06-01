@@ -1,7 +1,6 @@
 use crate::buffer::{BufferError, Record, Take};
 use crate::connect::*;
 use base64::{engine::general_purpose, Engine as _};
-use std::cell::RefCell;
 use std::cmp;
 use std::collections::VecDeque;
 use std::time::SystemTime;
@@ -10,44 +9,42 @@ use uuid::Uuid;
 #[derive(Debug, PartialEq)]
 pub struct Emitter {
     tag: String,
-    queue: RefCell<VecDeque<(SystemTime, Vec<u8>)>>,
+    queue: VecDeque<(SystemTime, Vec<u8>)>,
 }
 
 impl Emitter {
     pub fn new(tag: String) -> Self {
-        let queue = RefCell::new(VecDeque::new());
+        let queue = VecDeque::new();
         Self { tag, queue }
     }
 
     pub fn len(&self) -> usize {
-        self.queue.borrow().len()
+        self.queue.len()
     }
 
-    pub fn push(&self, elem: (SystemTime, Vec<u8>)) {
-        let mut q = self.queue.borrow_mut();
-        q.push_back(elem)
+    pub fn push(&mut self, elem: (SystemTime, Vec<u8>)) {
+        self.queue.push_back(elem)
     }
 
     pub fn emit<RW: WriteRead>(
-        &self,
+        &mut self,
         rw: &mut RW,
         size: Option<usize>,
         does_recover: bool,
     ) -> Result<(), EmitterError> {
-        let mut queue = self.queue.borrow_mut();
-        if queue.is_empty() {
+        if self.queue.is_empty() {
             return Ok(());
         }
-        let qlen = queue.len();
+        let qlen = self.queue.len();
         let mut entries = Vec::with_capacity(cmp::min(qlen, size.unwrap_or(qlen)));
-        queue.take(&mut entries);
+        self.queue.take(&mut entries);
 
         let chunk = general_purpose::STANDARD.encode(Uuid::new_v4().to_string());
         let rec = Record::new(&self.tag, entries.as_slice(), &chunk);
         let buf = rec.pack().map_err(EmitterError::Buffer)?;
         rw.write_and_read(&buf, &chunk).map_err(|e| {
             if does_recover {
-                queue.extend(entries);
+                self.queue.extend(entries);
             }
             EmitterError::Stream(e)
         })
@@ -76,7 +73,7 @@ mod test {
 
     #[test]
     fn emit_consume_queeu() {
-        let emitter = Emitter::new("x".to_string());
+        let mut emitter = Emitter::new("x".to_string());
 
         emitter.push((SystemTime::now(), vec![0x00, 0x01]));
         emitter.push((SystemTime::now(), vec![0x00, 0x02]));
@@ -86,23 +83,20 @@ mod test {
 
         {
             emitter.emit(&mut TestStream, Some(3), true).unwrap();
-            let q = emitter.queue.borrow_mut();
 
-            assert_eq!(q.len(), 2);
+            assert_eq!(emitter.len(), 2);
         }
 
         {
             emitter.emit(&mut TestStream, Some(3), true).unwrap();
-            let q = emitter.queue.borrow_mut();
 
-            assert_eq!(q.len(), 0);
+            assert_eq!(emitter.len(), 0);
         }
 
         {
             emitter.emit(&mut TestStream, Some(3), true).unwrap();
-            let q = emitter.queue.borrow_mut();
 
-            assert_eq!(q.len(), 0);
+            assert_eq!(emitter.len(), 0);
         }
 
         emitter.push((SystemTime::now(), vec![0x00, 0x01]));
@@ -112,16 +106,12 @@ mod test {
         emitter.push((SystemTime::now(), vec![0x00, 0x05]));
 
         {
-            let q = emitter.queue.borrow_mut();
-
-            assert_eq!(q.len(), 5);
+            assert_eq!(emitter.len(), 5);
         }
 
         {
             emitter.emit(&mut TestStream, None, true).unwrap();
-            let q = emitter.queue.borrow_mut();
-
-            assert_eq!(q.len(), 0);
+            assert_eq!(emitter.len(), 0);
         }
     }
 
@@ -135,7 +125,7 @@ mod test {
 
     #[test]
     fn emit_consume_queue_with_error_stream() {
-        let emitter = Emitter::new("x".to_string());
+        let mut emitter = Emitter::new("x".to_string());
 
         emitter.push((SystemTime::now(), vec![0x00, 0x01]));
         emitter.push((SystemTime::now(), vec![0x00, 0x02]));
@@ -144,14 +134,12 @@ mod test {
         emitter.push((SystemTime::now(), vec![0x00, 0x05]));
 
         assert!(emitter.emit(&mut TestErrStream, Some(3), false).is_err());
-        let q = emitter.queue.borrow_mut();
-
-        assert_eq!(q.len(), 2);
+        assert_eq!(emitter.len(), 2);
     }
 
     #[test]
     fn emit_not_consume_queue_with_error_stream_if_does_recover_is_true() {
-        let emitter = Emitter::new("x".to_string());
+        let mut emitter = Emitter::new("x".to_string());
 
         emitter.push((SystemTime::now(), vec![0x00, 0x01]));
         emitter.push((SystemTime::now(), vec![0x00, 0x02]));
@@ -160,35 +148,31 @@ mod test {
         emitter.push((SystemTime::now(), vec![0x00, 0x05]));
 
         assert!(emitter.emit(&mut TestErrStream, Some(3), true).is_err());
-        let q = emitter.queue.borrow_mut();
 
-        assert_eq!(q.len(), 5);
+        assert_eq!(emitter.len(), 5);
     }
 
     #[test]
     fn emit_valid_chunks() {
         struct Mock {
-            acc: RefCell<Vec<(Vec<u8>, String)>>,
+            acc: Vec<(Vec<u8>, String)>,
         }
 
         impl Mock {
             pub fn new() -> Mock {
-                Mock {
-                    acc: RefCell::new(Vec::new()),
-                }
+                Mock { acc: Vec::new() }
             }
         }
 
         impl WriteRead for Mock {
             fn write_and_read(&mut self, buf: &[u8], chunk: &str) -> Result<(), StreamError> {
-                let mut acc = self.acc.borrow_mut();
                 let args = (buf.to_vec(), chunk.to_string());
-                acc.push(args);
+                self.acc.push(args);
                 Ok(())
             }
         }
 
-        let emitter = Emitter::new("x".to_string());
+        let mut emitter = Emitter::new("x".to_string());
 
         for i in 1..1000 {
             emitter.push((SystemTime::now(), vec![0x00, (i as u8)]));
@@ -197,7 +181,7 @@ mod test {
         let rw = &mut Mock::new();
         emitter.emit(rw, Some(2), true).unwrap();
 
-        let acc = rw.acc.borrow();
+        let acc = &rw.acc;
         let chunks = acc
             .iter()
             .map(|(_, v)| general_purpose::STANDARD.decode(v).unwrap())
