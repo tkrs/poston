@@ -1,6 +1,7 @@
 use crate::buffer::Buffer;
 use crate::connect;
 use crate::error::ClientError;
+use crate::queue::RecoverySettings;
 use crate::worker::{Message, Worker};
 use crossbeam_channel::{bounded, unbounded, Sender};
 use serde::Serialize;
@@ -57,7 +58,12 @@ impl WorkerPool {
             receiver,
             settings.flush_period,
             settings.max_flush_entries,
-            settings.does_recover,
+            #[allow(deprecated)]
+            if settings.does_recover {
+                RecoverySettings::new(crate::RecoveryMode::Enqueue)
+            } else {
+                settings.recovery_settings
+            },
         )?;
 
         Ok(Self {
@@ -131,7 +137,9 @@ pub struct Settings {
     pub read_retry_max_delay: Duration,
     pub read_retry_timeout: Duration,
 
+    #[deprecated(since = "1.2.0", note = "use `recovery_settings` instead")]
     pub does_recover: bool,
+    pub recovery_settings: RecoverySettings,
 }
 
 impl Default for Settings {
@@ -150,7 +158,9 @@ impl Default for Settings {
             read_retry_timeout: Duration::from_secs(10),
             write_timeout: Duration::from_secs(1),
             read_timeout: Duration::from_secs(1),
+            #[allow(deprecated)]
             does_recover: false,
+            recovery_settings: RecoverySettings::default(),
         }
     }
 }

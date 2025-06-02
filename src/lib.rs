@@ -16,3 +16,4 @@ mod time_pack;
 mod worker;
 
 pub use crate::client::{Client, Settings, WorkerPool};
+pub use crate::queue::{RecoveryMode, RecoverySettings};

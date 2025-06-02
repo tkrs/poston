@@ -19,7 +19,7 @@ impl Worker {
         receiver: Receiver<Message>,
         flush_period: Duration,
         flush_size: usize,
-        does_recover: bool,
+        recovery_settings: RecoverySettings,
     ) -> io::Result<Self>
     where
         A: ToSocketAddrs + Clone + Debug + Send + 'static,
@@ -32,7 +32,7 @@ impl Worker {
                 receiver,
                 flush_period,
                 flush_size,
-                does_recover,
+                recovery_settings,
             );
             stream
                 .close()
@@ -61,9 +61,9 @@ fn start_worker<S: WriteRead>(
     receiver: Receiver<Message>,
     flush_period: Duration,
     flush_size: usize,
-    does_recover: bool,
+    recovery_settings: RecoverySettings,
 ) {
-    let mut queue = QueueHandler::new(stream, does_recover);
+    let mut queue = QueueHandler::new(stream, recovery_settings);
     let mut now = Instant::now();
 
     loop {
@@ -133,7 +133,14 @@ mod tests {
             ..Default::default()
         };
         let (_, receiver) = unbounded();
-        let ret = Worker::create(addr, settings, receiver, Duration::from_millis(1), 1, true);
+        let ret = Worker::create(
+            addr,
+            settings,
+            receiver,
+            Duration::from_millis(1),
+            1,
+            RecoverySettings::default(),
+        );
         assert!(ret.is_err(), "got: {:?}", ret)
     }
 
@@ -205,7 +212,15 @@ mod tests {
         let (sender, receiver) = unbounded();
         let (sender2, receiver2) = bounded::<()>(1);
 
-        thread::spawn(move || start_worker(WR, receiver, Duration::from_nanos(1), 1, true));
+        thread::spawn(move || {
+            start_worker(
+                WR,
+                receiver,
+                Duration::from_nanos(1),
+                1,
+                RecoverySettings::default(),
+            )
+        });
         sender.send(Message::Terminating(sender2)).unwrap();
 
         receiver2.recv_timeout(Duration::from_millis(100)).unwrap();
