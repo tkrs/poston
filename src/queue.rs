@@ -17,7 +17,7 @@ pub struct QueueHandler<S: WriteRead> {
     messages: VecDeque<Message>,
     failed_emitters: VecDeque<Emitter>,
     flusher: S,
-    does_recover: bool,
+    recovery_settings: RecoverySettings,
 }
 
 #[derive(Debug, Clone)]
@@ -27,13 +27,35 @@ struct Message {
     raw: Vec<u8>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct RecoverySettings {
+    recovery_mode: RecoveryMode,
+}
+impl RecoverySettings {
+    pub fn new(recovery_mode: RecoveryMode) -> Self {
+        Self { recovery_mode }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum RecoveryMode {
+    Discard,
+    Enqueue,
+}
+
+impl Default for RecoveryMode {
+    fn default() -> Self {
+        RecoveryMode::Discard
+    }
+}
+
 impl<S: WriteRead> QueueHandler<S> {
-    pub fn new(flusher: S, does_recover: bool) -> Self {
+    pub fn new(flusher: S, recovery_settings: RecoverySettings) -> Self {
         Self {
             messages: VecDeque::new(),
             failed_emitters: VecDeque::new(),
             flusher,
-            does_recover,
+            recovery_settings,
         }
     }
 
@@ -77,19 +99,24 @@ impl<S: WriteRead> Queue for QueueHandler<S> {
             emitters.extend(self.failed_emitters.drain(..));
         }
 
+        let recovery_mode = &self.recovery_settings.recovery_mode;
+
         for emitter in emitters.iter_mut() {
             if let Err(err) = emitter.emit(&mut self.flusher) {
-                if self.does_recover {
-                    warn!(
-                        "Tag '{}' error occurred during emitting messages; they will be retried on the next attempt, chunk: {}. cause: '{:?}'",
-                        emitter.tag(), emitter.chunk_id(), err
-                    );
-                    self.failed_emitters.push_back(emitter.clone());
-                } else {
-                    error!(
-                        "Tag '{}' error occurred during emitting messages; they will be discarded. chunk: {}, cause: '{:?}'",
-                        emitter.tag(), emitter.chunk_id(), err
-                    );
+                match recovery_mode {
+                    RecoveryMode::Discard => {
+                        error!(
+                            "Tag '{}' error occurred during emitting messages; they will be discarded. chunk: {}, cause: '{:?}'",
+                            emitter.tag(), emitter.chunk_id(), err
+                        );
+                    }
+                    RecoveryMode::Enqueue => {
+                        warn!(
+                            "Tag '{}' error occurred during emitting messages; they will be retried on the next attempt, chunk: {}. cause: '{:?}'",
+                            emitter.tag(), emitter.chunk_id(), err
+                        );
+                        self.failed_emitters.push_back(emitter.clone());
+                    }
                 }
             }
         }
@@ -128,7 +155,7 @@ mod tests {
             messages,
             failed_emitters,
             flusher,
-            does_recover: true,
+            recovery_settings: RecoverySettings::new(RecoveryMode::Enqueue),
         };
 
         let now = SystemTime::now();
@@ -167,7 +194,7 @@ mod tests {
             messages,
             failed_emitters,
             flusher,
-            does_recover: true,
+            recovery_settings: RecoverySettings::new(RecoveryMode::Enqueue),
         };
 
         let now = SystemTime::now();

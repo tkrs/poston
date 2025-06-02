@@ -4,7 +4,7 @@ extern crate serde_derive;
 use actix_web::web::{Data, Json, Path};
 use actix_web::{error, get, middleware, App, HttpServer};
 use log::info;
-use poston::{Client, Settings, WorkerPool};
+use poston::{Client, RecoveryMode, RecoverySettings, Settings, WorkerPool};
 use rand::prelude::*;
 use rand::{self, distr::Alphanumeric};
 use std::collections::BTreeMap;
@@ -120,7 +120,7 @@ fn prepare_fluentd_client(addr: String) -> Result<WorkerPool, io::Error> {
         connection_retry_timeout: Duration::from_secs(5),
         write_timeout: Duration::from_secs(10),
         read_timeout: Duration::from_secs(10),
-        does_recover: true,
+        recovery_settings: RecoverySettings::new(RecoveryMode::Enqueue),
         ..Default::default()
     };
     WorkerPool::with_settings(&addr, &settings)
