@@ -29,7 +29,7 @@ async fn member(
         .cloned()
         .ok_or_else(|| error::ErrorNotFound("Member not found"))?;
 
-    let sent = client.send("customer".into(), &m, SystemTime::now());
+    let sent = client.send(format!("customer.{}", m.age % 3), &m, SystemTime::now());
     if let Err(err) = sent {
         info!("Failed to send data to Fluentd: {}", err);
     }

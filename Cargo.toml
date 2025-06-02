@@ -20,6 +20,7 @@ maintenance = { status = "experimental" }
 backoff = "0.4"
 base64 = "0.22"
 crossbeam-channel = "0.5"
+itertools = "0.14"
 log = "0.4"
 rmp = "0.8"
 rmp-serde = "1.1"
