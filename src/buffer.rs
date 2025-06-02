@@ -5,7 +5,6 @@ use crate::time_pack::TimePack;
 use rmp::encode;
 use serde::Deserialize;
 use serde::Serialize;
-use std::collections::VecDeque;
 use std::time::SystemTime;
 use thiserror::Error;
 
@@ -18,23 +17,6 @@ impl<T: Serialize> Buffer<T> for T {
         let mut buf = Vec::new();
         rencode::write_named(&mut buf, self).map_err(BufferError::Pack)?;
         Ok(buf)
-    }
-}
-
-pub trait Take<T> {
-    fn take(&mut self, buf: &mut Vec<T>);
-}
-
-impl<T> Take<T> for VecDeque<T> {
-    fn take(&mut self, buf: &mut Vec<T>) {
-        let sz = buf.capacity();
-        for _ in 0..sz {
-            if let Some(e) = self.remove(0) {
-                buf.push(e);
-                continue;
-            }
-            break;
-        }
     }
 }
 
@@ -112,33 +94,6 @@ pub enum BufferError {
     Pack(#[from] rencode::Error),
     #[error("unpack failed")]
     Unpack(#[from] rdecode::Error),
-}
-
-#[cfg(test)]
-mod test_take {
-    use super::Take;
-    use std::collections::VecDeque;
-
-    #[test]
-    fn it_should_move_elements_to_passed_buffer() {
-        let mut queue = VecDeque::new();
-        for i in 0..5 {
-            queue.push_back(i);
-        }
-        let mut buffer = Vec::with_capacity(3);
-
-        queue.take(&mut buffer);
-
-        assert_eq!(buffer, vec![0, 1, 2]);
-        assert_eq!(queue.len(), 2);
-
-        let mut buffer = Vec::with_capacity(3);
-
-        queue.take(&mut buffer);
-
-        assert_eq!(buffer, vec![3, 4]);
-        assert_eq!(queue.len(), 0);
-    }
 }
 
 #[cfg(test)]

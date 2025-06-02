@@ -1,6 +1,10 @@
+use itertools::Itertools;
+use uuid::Uuid;
+
 use crate::connect::*;
 use crate::emitter::Emitter;
-use std::collections::HashMap;
+use std::cmp;
+use std::collections::VecDeque;
 use std::time::SystemTime;
 
 pub trait Queue {
@@ -10,47 +14,81 @@ pub trait Queue {
 }
 
 pub struct QueueHandler<S: WriteRead> {
-    emitters: HashMap<String, Emitter>,
+    messages: VecDeque<Message>,
+    failed_emitters: VecDeque<Emitter>,
     flusher: S,
     does_recover: bool,
+}
+
+#[derive(Debug, Clone)]
+struct Message {
+    tag: String,
+    tm: SystemTime,
+    raw: Vec<u8>,
 }
 
 impl<S: WriteRead> QueueHandler<S> {
     pub fn new(flusher: S, does_recover: bool) -> Self {
         Self {
-            emitters: HashMap::new(),
+            messages: VecDeque::new(),
+            failed_emitters: VecDeque::new(),
             flusher,
             does_recover,
         }
     }
 
-    #[cfg(test)]
-    fn emitters(&self) -> &HashMap<String, Emitter> {
-        &self.emitters
+    fn grouped_emitters(&mut self, size: usize) -> Vec<Emitter> {
+        let messages = self.messages.drain(0..size).collect::<Vec<_>>();
+
+        messages
+            .into_iter()
+            .into_group_map_by(|m| m.tag.clone())
+            .iter()
+            .map(|(key, chunk)| {
+                Emitter::new(
+                    key.clone(),
+                    Uuid::new_v4(),
+                    chunk
+                        .iter()
+                        .map(|Message { tm, raw, .. }| (*tm, raw.clone()))
+                        .collect(),
+                )
+            })
+            .collect()
     }
 }
 
 impl<S: WriteRead> Queue for QueueHandler<S> {
     fn push(&mut self, tag: String, tm: SystemTime, msg: Vec<u8>) {
-        let emitter = self
-            .emitters
-            .entry(tag.clone())
-            .or_insert_with(|| Emitter::new(tag));
-        emitter.push((tm, msg));
+        self.messages.push_back(Message { tag, tm, raw: msg });
     }
 
     fn flush(&mut self, size: Option<usize>) {
-        for (tag, emitter) in self.emitters.iter_mut() {
-            if let Err(err) = emitter.emit(&mut self.flusher, size, self.does_recover) {
+        if self.messages.is_empty() {
+            return;
+        }
+
+        let mes_len = self.messages.len();
+        let size = cmp::min(mes_len, size.unwrap_or(mes_len));
+        let mut emitters = self.grouped_emitters(size);
+
+        // If there are any failed emitters, we need to re-emit them
+        if !self.failed_emitters.is_empty() {
+            emitters.extend(self.failed_emitters.drain(..));
+        }
+
+        for emitter in emitters.iter_mut() {
+            if let Err(err) = emitter.emit(&mut self.flusher) {
                 if self.does_recover {
                     warn!(
-                        "Tag '{}' error occurred during emitting messages; they will be retried on the next attempt. Cause: '{:?}'",
-                        tag, err
+                        "Tag '{}' error occurred during emitting messages; they will be retried on the next attempt, chunk: {}. cause: '{:?}'",
+                        emitter.tag(), emitter.chunk_id(), err
                     );
+                    self.failed_emitters.push_back(emitter.clone());
                 } else {
                     error!(
-                        "Tag '{}' error occurred during emitting messages; they will be discarded. Cause: '{:?}'",
-                        tag, err
+                        "Tag '{}' error occurred during emitting messages; they will be discarded. chunk: {}, cause: '{:?}'",
+                        emitter.tag(), emitter.chunk_id(), err
                     );
                 }
             }
@@ -58,7 +96,7 @@ impl<S: WriteRead> Queue for QueueHandler<S> {
     }
 
     fn len(&self) -> usize {
-        self.emitters.values().map(Emitter::len).sum()
+        self.messages.len() + self.failed_emitters.iter().map(|e| e.len()).sum::<usize>()
     }
 }
 
@@ -81,16 +119,17 @@ mod tests {
                 Ok(())
             }
         }
-        let emitters = HashMap::new();
+
+        let messages = VecDeque::new();
+        let failed_emitters = VecDeque::new();
         let flusher = W;
 
         let mut queue = QueueHandler {
-            emitters,
+            messages,
+            failed_emitters,
             flusher,
             does_recover: true,
         };
-
-        assert!(queue.emitters().is_empty());
 
         let now = SystemTime::now();
 
@@ -100,28 +139,84 @@ mod tests {
         queue.push("b".to_string(), now, vec![3u8, 6u8]);
         queue.push("c".to_string(), now, vec![4u8, 5u8]);
 
-        let mut expected = Emitter::new("a".to_string());
-        expected.push((now, vec![0u8, 9u8]));
-        expected.push((now, vec![2u8, 7u8]));
-        assert_eq!(queue.emitters().get("a").unwrap(), &expected);
-
-        let mut expected = Emitter::new("b".to_string());
-        expected.push((now, vec![1u8, 8u8]));
-        expected.push((now, vec![3u8, 6u8]));
-        assert_eq!(queue.emitters().get("b").unwrap(), &expected);
-
-        let mut expected = Emitter::new("c".to_string());
-        expected.push((now, vec![4u8, 5u8]));
-        assert_eq!(queue.emitters().get("c").unwrap(), &expected);
-
         assert_eq!(queue.len(), 5);
 
-        queue.flush(Some(1));
+        queue.flush(Some(3));
 
         assert_eq!(queue.len(), 2);
 
         queue.flush(None);
 
         assert_eq!(queue.len(), 0);
+    }
+
+    #[test]
+    fn test_flush_failed() {
+        struct W;
+        impl WriteRead for W {
+            fn write_and_read(&mut self, _buf: &[u8], _chunk: &str) -> Result<(), StreamError> {
+                Err(StreamError::AckUmatched("x".into(), "y".into()))
+            }
+        }
+
+        let messages = VecDeque::new();
+        let failed_emitters = VecDeque::new();
+        let flusher = W;
+
+        let mut queue = QueueHandler {
+            messages,
+            failed_emitters,
+            flusher,
+            does_recover: true,
+        };
+
+        let now = SystemTime::now();
+
+        queue.push("a".to_string(), now, vec![0u8, 9u8]);
+        queue.push("b".to_string(), now, vec![1u8, 8u8]);
+        queue.push("a".to_string(), now, vec![2u8, 7u8]);
+        queue.push("b".to_string(), now, vec![3u8, 6u8]);
+        queue.push("c".to_string(), now, vec![4u8, 5u8]);
+
+        queue.flush(Some(3));
+        assert_eq!(queue.len(), 5);
+        assert_eq!(
+            queue
+                .failed_emitters
+                .iter()
+                .clone()
+                .map(|e| (e.tag().to_string(), e.entries().clone()))
+                .sorted()
+                .collect::<Vec<_>>(),
+            vec![
+                (
+                    "a".to_string(),
+                    vec![(now, vec![0u8, 9u8]), (now, vec![2u8, 7u8])]
+                ),
+                ("b".to_string(), vec![(now, vec![1u8, 8u8])]),
+            ]
+        );
+
+        queue.flush(None);
+        assert!(queue.messages.is_empty());
+        assert_eq!(queue.len(), 5);
+        assert_eq!(
+            queue
+                .failed_emitters
+                .iter()
+                .clone()
+                .map(|e| (e.tag().to_string(), e.entries().clone()))
+                .sorted()
+                .collect::<Vec<_>>(),
+            vec![
+                (
+                    "a".to_string(),
+                    vec![(now, vec![0u8, 9u8]), (now, vec![2u8, 7u8])]
+                ),
+                ("b".to_string(), vec![(now, vec![1u8, 8u8])]),
+                ("b".to_string(), vec![(now, vec![3u8, 6u8])]),
+                ("c".to_string(), vec![(now, vec![4u8, 5u8])]),
+            ]
+        );
     }
 }
