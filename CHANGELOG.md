@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/tkrs/poston/compare/v1.1.0...v1.2.0) (2025-06-02)
+
+
+### Features
+
+* add recovery configuration ([#220](https://github.com/tkrs/poston/issues/220)) ([fec6205](https://github.com/tkrs/poston/commit/fec6205349b9042624f8ef38777a2ca6f816669c))
+
 ## [1.1.0](https://github.com/tkrs/poston/compare/v1.0.0...v1.1.0) (2025-05-28)
 
 
