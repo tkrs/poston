@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/tkrs/poston/compare/v1.2.0...v1.3.0) (2025-06-03)
+
+
+### Features
+
+* ignore does_recover ([#222](https://github.com/tkrs/poston/issues/222)) ([df9a16d](https://github.com/tkrs/poston/commit/df9a16d2ee93180cdbbf8a99b213995f61dd4960))
+
 ## [1.2.0](https://github.com/tkrs/poston/compare/v1.1.0...v1.2.0) (2025-06-02)
 
 
