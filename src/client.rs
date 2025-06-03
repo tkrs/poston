@@ -58,12 +58,7 @@ impl WorkerPool {
             receiver,
             settings.flush_period,
             settings.max_flush_entries,
-            #[allow(deprecated)]
-            if settings.does_recover {
-                RecoverySettings::new(crate::RecoveryMode::Enqueue)
-            } else {
-                settings.recovery_settings
-            },
+            settings.recovery_settings,
         )?;
 
         Ok(Self {
@@ -137,7 +132,10 @@ pub struct Settings {
     pub read_retry_max_delay: Duration,
     pub read_retry_timeout: Duration,
 
-    #[deprecated(since = "1.2.0", note = "use `recovery_settings` instead")]
+    #[deprecated(
+        since = "1.2.0",
+        note = "use `recovery_settings` instead, it has no effect"
+    )]
     pub does_recover: bool,
     pub recovery_settings: RecoverySettings,
 }
