@@ -73,7 +73,6 @@ impl Client for WorkerPool {
     fn send<A>(&self, tag: String, a: &A, timestamp: SystemTime) -> Result<(), ClientError>
     where
         A: Serialize,
-        A: Buffer<A>,
     {
         if self.terminated.load(Ordering::Acquire) {
             debug!("Worker does already closed.");
