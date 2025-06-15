@@ -3,10 +3,6 @@ on:
     branches:
       - master
 
-permissions:
-  contents: write
-  pull-requests: write
-
 name: release-please
 
 jobs:
@@ -14,9 +10,16 @@ jobs:
     runs-on: ubuntu-latest
     environment: crates-io
     steps:
+      - name: Generate github app token
+        id: generate_token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
       - uses: googleapis/release-please-action@v4
         id: release
         with:
+          token: ${{ steps.generate_token.outputs.token }}
           release-type: rust
       - uses: actions/checkout@v4
         if: ${{ steps.release.outputs.release_created }}
