@@ -59,7 +59,9 @@ impl<S: WriteRead> QueueHandler<S> {
         }
     }
 
-    fn grouped_emitters(&mut self, size: usize) -> Vec<Emitter> {
+    fn grouped_emitters(&mut self, size: Option<usize>) -> Vec<Emitter> {
+        let mes_len = self.messages.len();
+        let size = cmp::min(mes_len, size.unwrap_or(mes_len));
         let messages = self.messages.drain(0..size).collect::<Vec<_>>();
 
         messages
@@ -90,8 +92,6 @@ impl<S: WriteRead> Queue for QueueHandler<S> {
             return;
         }
 
-        let mes_len = self.messages.len();
-        let size = cmp::min(mes_len, size.unwrap_or(mes_len));
         let mut emitters = self.grouped_emitters(size);
 
         // If there are any failed emitters, we need to re-emit them
@@ -137,6 +137,60 @@ pub enum HandleResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_grouped_emitters() {
+        struct W;
+        impl WriteRead for W {
+            fn write_and_read(&mut self, _buf: &[u8], _chunk: &str) -> Result<(), StreamError> {
+                Ok(())
+            }
+        }
+
+        let mut queue = QueueHandler {
+            messages: VecDeque::new(),
+            failed_emitters: VecDeque::new(),
+            flusher: W,
+            recovery_settings: RecoverySettings::new(RecoveryMode::Discard),
+        };
+
+        let now = SystemTime::now();
+
+        queue.push("a".to_string(), now, vec![0u8, 9u8]);
+        queue.push("b".to_string(), now, vec![1u8, 8u8]);
+        queue.push("a".to_string(), now, vec![2u8, 7u8]);
+        queue.push("b".to_string(), now, vec![3u8, 6u8]);
+        queue.push("c".to_string(), now, vec![4u8, 5u8]);
+
+        assert_eq!(
+            queue
+                .grouped_emitters(Some(3))
+                .iter()
+                .map(|v| (v.tag().to_string(), v.entries().clone()))
+                .sorted()
+                .collect::<Vec<_>>(),
+            vec![
+                (
+                    "a".to_string(),
+                    vec![(now, vec![0u8, 9u8]), (now, vec![2u8, 7u8])]
+                ),
+                ("b".to_string(), vec![(now, vec![1u8, 8u8])]),
+            ]
+        );
+
+        assert_eq!(
+            queue
+                .grouped_emitters(Some(3))
+                .iter()
+                .map(|v| (v.tag().to_string(), v.entries().clone()))
+                .sorted()
+                .collect::<Vec<_>>(),
+            vec![
+                ("b".to_string(), vec![(now, vec![3u8, 6u8])]),
+                ("c".to_string(), vec![(now, vec![4u8, 5u8])]),
+            ]
+        );
+    }
 
     #[test]
     fn test_push_flush() {
