@@ -30,7 +30,6 @@ static POOL: LazyLock<WorkerPool> = LazyLock::new(|| {
 
 fn init() {
     if std::env::var("RUST_LOG").is_err() {
-        // TODO: Audit that the environment access only happens in single-threaded code.
         unsafe { std::env::set_var("RUST_LOG", "debug") };
     }
     pretty_env_logger::init();
