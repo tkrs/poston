@@ -313,7 +313,7 @@ mod tests {
             {
                 if addr.to_socket_addrs().is_ok() {
                     let count = CONN_COUNT.fetch_add(1, Ordering::SeqCst);
-                    if count % 20 == 0 {
+                    if count.is_multiple_of(20) {
                         Ok(TestStream(AtomicUsize::new(1)))
                     } else {
                         Err(io::Error::from(io::ErrorKind::ConnectionRefused))

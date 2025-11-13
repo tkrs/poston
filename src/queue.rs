@@ -38,16 +38,13 @@ impl RecoverySettings {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Default)]
 pub enum RecoveryMode {
+    #[default]
     Discard,
     Enqueue,
 }
 
-impl Default for RecoveryMode {
-    fn default() -> Self {
-        RecoveryMode::Discard
-    }
-}
 
 impl<S: WriteRead> QueueHandler<S> {
     pub fn new(flusher: S, recovery_settings: RecoverySettings) -> Self {
