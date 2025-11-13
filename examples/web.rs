@@ -39,7 +39,8 @@ async fn member(
 
 fn init() {
     if std::env::var("RUST_LOG").is_err() {
-        std::env::set_var("RUST_LOG", "debug");
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var("RUST_LOG", "debug") };
     }
     pretty_env_logger::init();
 }
