@@ -18,7 +18,7 @@ maintenance = { status = "experimental" }
 
 [dependencies]
 backoff = "0.4"
-base64 = "0.22"
+base64 = "0.23"
 crossbeam-channel = "0.5"
 itertools = "0.14"
 log = "0.4"
